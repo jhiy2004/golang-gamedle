@@ -15,7 +15,6 @@ type NotifyMsg struct {
 
 type StateMsg struct {
 	Question string `json:"question"`
-	Player   string `json:"player"`
 	Winner   string `json:"winner"`
 	State    string `json:"state"`
 }
@@ -25,6 +24,8 @@ type GuessMsg struct {
 }
 
 type ReadyMsg struct{}
+
+type CancelMsg struct{}
 
 func NewGuessMsg(answer string) (*Message, error) {
 	msg := GuessMsg{
@@ -60,6 +61,22 @@ func NewReadyMsg() (*Message, error) {
 	return &base, nil
 }
 
+func NewCancelMsg() (*Message, error) {
+	msg := ReadyMsg{}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "cancel",
+		Payload: content,
+	}
+
+	return &base, nil
+}
+
 func NewNotifyMsg(text string) (*Message, error) {
 	msg := NotifyMsg{
 		Text: text,
@@ -81,7 +98,6 @@ func NewNotifyMsg(text string) (*Message, error) {
 func NewStateMsg(question, player, winner, state string) (*Message, error) {
 	msg := StateMsg{
 		Question: question,
-		Player:   player,
 		Winner:   winner,
 		State:    state,
 	}

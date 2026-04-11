@@ -14,9 +14,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"examples/clidle/server/db"
-	"examples/clidle/server/game"
-	"examples/clidle/tui"
+	"github.com/jhiy2004/golang-gamedle/server/db"
+	"github.com/jhiy2004/golang-gamedle/server/game"
+	"github.com/jhiy2004/golang-gamedle/tui"
 )
 
 var upgrader = websocket.Upgrader{

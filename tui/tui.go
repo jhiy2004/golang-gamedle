@@ -9,8 +9,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
-	"examples/clidle/server/game"
 	"github.com/charmbracelet/x/exp/charmtone"
+	"github.com/jhiy2004/golang-gamedle/server/game"
 )
 
 type NotifyMsg struct {
@@ -50,8 +50,9 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
+	var invalidInput string
 
+	switch msg := msg.(type) {
 	case NotifyMsg:
 		m.Notifications = append(m.Notifications, msg.Text)
 		m.Viewport.SetContent(
@@ -63,7 +64,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StateMsg:
 		m.State.Question = msg.State.Question
-		m.State.Player = msg.State.Player
 		m.State.Winner = msg.State.Winner
 		m.State.State = game.StringToRoomState(msg.State.State)
 
@@ -125,6 +125,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					m.Notifications = append(m.Notifications, m.SenderStyle.Render("Error: ")+err.Error())
 				}
+			} else if m.State.State == game.Waiting && m.Textinput.Value() == "cancel" {
+				msg, err := game.NewCancelMsg()
+				if err != nil {
+					m.Notifications = append(m.Notifications, m.SenderStyle.Render("Error: ")+err.Error())
+				}
+
+				err = m.SendMessageCallback(msg)
+				if err != nil {
+					m.Notifications = append(m.Notifications, m.SenderStyle.Render("Error: ")+err.Error())
+				}
 			} else if m.State.State == game.Playing {
 				msg, err := game.NewGuessMsg(m.Textinput.Value())
 				if err != nil {
@@ -135,11 +145,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					m.Notifications = append(m.Notifications, m.SenderStyle.Render("Error: ")+err.Error())
 				}
+			} else if m.State.State == game.End {
+				invalidInput = "You can't send more messages"
 			} else {
-				m.Notifications = append(m.Notifications, m.SenderStyle.Render("What: Oh no!!!"))
+				invalidInput = "Invalid input"
 			}
 
 			m.Notifications = append(m.Notifications, m.SenderStyle.Render("You: ")+m.Textinput.Value())
+
+			if invalidInput != "" {
+				errStyle := lipgloss.NewStyle().
+					Foreground(charmtone.Cherry)
+				m.Notifications = append(m.Notifications, m.SenderStyle.Render(errStyle.Render(invalidInput)))
+			}
+
 			m.Viewport.SetContent(lipgloss.NewStyle().Width(m.Viewport.Width()).Render(strings.Join(m.Notifications, "\n")))
 			m.Textinput.Reset()
 			m.Viewport.GotoBottom()

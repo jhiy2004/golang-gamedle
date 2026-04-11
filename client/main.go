@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"examples/clidle/server/game"
-	"examples/clidle/tui"
 	"fmt"
+	"github.com/jhiy2004/golang-gamedle/server/game"
+	"github.com/jhiy2004/golang-gamedle/tui"
 	"net/http"
 	"os"
 	"time"

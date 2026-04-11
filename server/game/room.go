@@ -2,8 +2,8 @@ package game
 
 import (
 	"encoding/json"
-	"examples/clidle/server/db"
 	"fmt"
+	"github.com/jhiy2004/golang-gamedle/server/db"
 	"log"
 	"os"
 	"strings"
@@ -19,9 +19,15 @@ const (
 	End
 )
 
+const (
+	configFilename = "config.json"
+)
+
 type RoomConfig struct {
-	MinPlayers, MaxPlayers, QuestionsCount int
-	TimeoutSec                             time.Duration
+	MinPlayers     int           `json:"minPlayers"`
+	MaxPlayers     int           `json:"maxPlayers"`
+	QuestionsCount int           `json:"questionsCount"`
+	TimeoutSec     time.Duration `json:"timeoutSec"`
 }
 
 type Room struct {
@@ -222,11 +228,21 @@ func ReadConfig() *RoomConfig {
 		TimeoutSec:     5 * time.Second,
 	}
 
-	file, err := os.Open("config.json")
+	file, err := os.Open(configFilename)
 	defer file.Close()
 
 	if err != nil {
-		fmt.Println(err)
+		content, err := json.Marshal(&defaultConfig)
+		if err != nil {
+			log.Fatal("Failed to create the config file")
+		}
+
+		// rw-r--r--
+		err = os.WriteFile(configFilename, content, 0644)
+		if err != nil {
+			log.Fatal("Failed to write into config file")
+		}
+
 		return &defaultConfig
 	}
 

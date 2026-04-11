@@ -1,4 +1,4 @@
-module examples/clidle
+module github.com/jhiy2004/golang-gamedle
 
 go 1.26.1
 

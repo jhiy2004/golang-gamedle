@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"examples/clidle/server/db"
 	"fmt"
+	"github.com/jhiy2004/golang-gamedle/server/db"
 	"log"
 	"math/rand"
 )
@@ -181,7 +181,7 @@ func GameEnd(room *Room, player Player) {
 	room.Winner = player
 	room.Status = End
 
-	message, err := NewStateMsg("Game ended!!!", player.GetName(), player.GetName(), "end")
+	message, err := NewStateMsg("Game ended!!!", player.GetName(), player.GetName(), RoomStateToString(End))
 	err = player.Send(message)
 	if err != nil {
 		log.Println("[ERROR] Failed to receive end game state")
