@@ -143,8 +143,13 @@ func quitClosure() func() error {
 	}
 }
 
-func startServerCallback(room *game.Room) func() error {
+func startServerCallback(room *game.Room, mydb *sql.DB, rng *rand.Rand, config *game.RoomConfig) func() error {
 	return func() error {
+		err := game.GameStart(room, mydb, rng, config.QuestionsCount)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		log.Println("Server start")
 
 		http.HandleFunc("/ws", wsHandlerClosure(room))
@@ -226,8 +231,12 @@ func main() {
 	config := game.ReadConfig()
 	room := game.NewRoom(config)
 
+	seed := rand.NewSource(42)
+	rng := rand.New(seed)
+
 	seedCallbackFn := seedCallback(mydb)
-	startServerCallbackFn := startServerCallback(room)
+	startServerCallbackFn := startServerCallback(room, mydb, rng, config)
+
 	exitCallbackFn := exitCallback()
 
 	cmds := map[string]struct {
@@ -246,13 +255,6 @@ func main() {
 			Name:     "exit",
 			Callback: exitCallbackFn,
 		},
-	}
-
-	seed := rand.NewSource(42)
-	rng := rand.New(seed)
-	err = game.GameStart(room, mydb, rng, config.QuestionsCount)
-	if err != nil {
-		log.Fatal(err)
 	}
 
 	for {
