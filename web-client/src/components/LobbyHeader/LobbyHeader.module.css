@@ -1,0 +1,4 @@
+.lobbyHeader {
+  display: flex;
+  justify-content: space-between;
+}
