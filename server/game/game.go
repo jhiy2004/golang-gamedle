@@ -48,6 +48,26 @@ func Gameplay(room *Room, player Player, msgCh chan *Message) {
 }
 
 func GameLobby(room *Room, player Player, msgCh chan *Message) {
+	message, err := NewStartMsg(room.MinPlayers, room.MaxPlayers, player.GetName())
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = player.Send(message)
+	if err != nil {
+		log.Println(err)
+	}
+	player.Send(message)
+
+	message, err = NewLobbyMsg(room.CurrPlayers, room.ReadyPlayers)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = player.Send(message)
+	if err != nil {
+		log.Println(err)
+	}
+	room.Broadcast(nil, message)
+
 	for room.GetStatus() == Waiting {
 		room.WaitMinReached()
 
@@ -107,6 +127,16 @@ func GameLobby(room *Room, player Player, msgCh chan *Message) {
 				}
 				room.Broadcast(player, message)
 			}
+
+			message, err := NewLobbyMsg(room.CurrPlayers, room.ReadyPlayers)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = player.Send(message)
+			if err != nil {
+				log.Println(err)
+			}
+			room.Broadcast(nil, message)
 		}
 	}
 }

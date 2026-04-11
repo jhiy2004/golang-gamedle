@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -13,6 +14,14 @@ import (
 	"github.com/jhiy2004/golang-gamedle/server/game"
 )
 
+type StartMsg struct {
+	Msg game.StartMsg
+}
+
+type LobbyMsg struct {
+	Msg game.LobbyMsg
+}
+
 type NotifyMsg struct {
 	Text string
 }
@@ -22,10 +31,12 @@ type StateMsg struct {
 }
 
 type GameState struct {
-	Question string
-	Player   string
-	State    game.RoomState
-	Winner   string
+	Question   string
+	Player     string
+	State      game.RoomState
+	Winner     string
+	MaxPlayers int
+	MinPlayers int
 }
 
 type Model struct {
@@ -53,6 +64,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var invalidInput string
 
 	switch msg := msg.(type) {
+	case StartMsg:
+		msgContent := msg.Msg
+
+		m.State.Player = msgContent.PlayerName
+		m.State.MinPlayers = msgContent.MinPlayers
+		m.State.MaxPlayers = msgContent.MaxPlayers
+
+	case LobbyMsg:
+		msgContent := msg.Msg
+
+		m.Notifications = append(
+			m.Notifications,
+			fmt.Sprintf("%d/%d Players in the room", msgContent.CurrPlayers, m.State.MaxPlayers),
+		)
+
+		m.Notifications = append(
+			m.Notifications,
+			fmt.Sprintf("%d/%d Players ready", msgContent.ReadyPlayers, msgContent.CurrPlayers),
+		)
+
+		m.Viewport.SetContent(
+			lipgloss.NewStyle().
+				Width(m.Viewport.Width()).
+				Render(strings.Join(m.Notifications, "\n")),
+		)
+		m.Viewport.GotoBottom()
+
 	case NotifyMsg:
 		m.Notifications = append(m.Notifications, msg.Text)
 		m.Viewport.SetContent(

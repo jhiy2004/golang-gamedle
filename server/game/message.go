@@ -23,9 +23,59 @@ type GuessMsg struct {
 	Answer string `json:"answer"`
 }
 
+type LobbyMsg struct {
+	CurrPlayers  int `json:"currPlayers"`
+	ReadyPlayers int `json:"readyPlayers"`
+}
+
+type StartMsg struct {
+	MinPlayers int    `json:"minPlayers"`
+	MaxPlayers int    `json:"maxPlayers"`
+	PlayerName string `json:"playerName"`
+}
+
 type ReadyMsg struct{}
 
 type CancelMsg struct{}
+
+func NewLobbyMsg(currPlayers, readyPlayers int) (*Message, error) {
+	msg := LobbyMsg{
+		CurrPlayers:  currPlayers,
+		ReadyPlayers: readyPlayers,
+	}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "lobby",
+		Payload: content,
+	}
+
+	return &base, nil
+}
+
+func NewStartMsg(minPlayers, maxPlayers int, playerName string) (*Message, error) {
+	msg := StartMsg{
+		MinPlayers: minPlayers,
+		MaxPlayers: maxPlayers,
+		PlayerName: playerName,
+	}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "start",
+		Payload: content,
+	}
+
+	return &base, nil
+}
 
 func NewGuessMsg(answer string) (*Message, error) {
 	msg := GuessMsg{

@@ -81,6 +81,24 @@ func main() {
 			}
 
 			switch response.Cmd {
+			case "start":
+				msg := game.StartMsg{}
+				err = json.Unmarshal(response.Payload, &msg)
+				if err != nil {
+					p.Send(tui.NotifyMsg{Text: err.Error()})
+					continue
+				}
+
+				p.Send(tui.StartMsg{Msg: msg})
+			case "lobby":
+				msg := game.LobbyMsg{}
+				err = json.Unmarshal(response.Payload, &msg)
+				if err != nil {
+					p.Send(tui.NotifyMsg{Text: err.Error()})
+					continue
+				}
+
+				p.Send(tui.LobbyMsg{Msg: msg})
 			case "notify":
 				msg := game.NotifyMsg{}
 				err = json.Unmarshal(response.Payload, &msg)
