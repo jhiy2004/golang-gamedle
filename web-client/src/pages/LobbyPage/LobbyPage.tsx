@@ -3,6 +3,7 @@ import banner from "../../assets/banner.jpg"
 import ReadyButton from "../../components/ReadyButton/ReadyButton"
 import LobbyHeader from "../../components/LobbyHeader/LobbyHeader"
 import type { LobbyPageProps } from "./types"
+import MainCard from "../../components/MainCard/MainCard"
 
 function LobbyPage({
   ready,
@@ -13,27 +14,8 @@ function LobbyPage({
   currPlayers,
 }: LobbyPageProps) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        minHeight: "100vh",
-        backgroundColor: "#f3f4f6",
-      }}
-    >
-      <section
-        style={{
-          width: 320,
-          borderRadius: "16px",
-          overflow: "hidden",
-
-          backgroundColor: "white",
-          boxShadow: "0 10px 25px rgba(0, 0, 0, 0.15)",
-
-          paddingBottom: "12px",
-        }}
-      >
+    <MainCard>
+      <div>
         <img
           src={banner}
           alt="Banner"
@@ -65,8 +47,8 @@ function LobbyPage({
             />
           </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </MainCard>
   )
 
 }

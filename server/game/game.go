@@ -144,9 +144,33 @@ func GameLobby(room *Room, player Player, msgCh chan *Message) {
 func GameQuestions(room *Room, player Player, msgCh chan *Message) {
 	questionCnt := 0
 	qtdQuestions := len(room.QuestionsOrder)
+
+	message, err := NewPlayerStatusMsg(player.GetName(), questionCnt)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	room.Broadcast(nil, message)
+
 	for questionCnt < qtdQuestions {
 		currQuestion := room.QuestionsOrder[questionCnt]
-		message, err := NewStateMsg(room.Questions[currQuestion].Question, player.GetName(), "", RoomStateToString(room.Status))
+		playersNames := make([]string, 0)
+		for p, active := range room.Players {
+			if active {
+				playersNames = append(playersNames, p.GetName())
+			}
+		}
+
+		message, err := NewStateMsg(
+			room.Questions[currQuestion].Question,
+			player.GetName(),
+			"",
+			RoomStateToString(room.Status),
+			playersNames,
+		)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -170,16 +194,23 @@ func GameQuestions(room *Room, player Player, msgCh chan *Message) {
 			}
 
 			if room.ValidateAnswer(currQuestion, guessMsg.Answer) {
+				// TODO: Remove the notification logic
 				message, err := NewNotifyMsg("You're right!")
 				if err != nil {
 					log.Fatal(err)
 				}
-
 				err = player.Send(message)
+
+				message, err = NewGuessResponseMsg(true, "You're right")
 				if err != nil {
 					log.Fatal(err)
 				}
 
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				// TODO: Remove the notification logic
 				message, err = NewNotifyMsg(fmt.Sprintf("User %s passed the %d question", player.GetName(), questionCnt+1))
 				if err != nil {
 					log.Fatal(err)
@@ -189,9 +220,30 @@ func GameQuestions(room *Room, player Player, msgCh chan *Message) {
 					player,
 					message,
 				)
+
+				message, err = NewPlayerStatusMsg(player.GetName(), questionCnt+1)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				room.Broadcast(
+					nil,
+					message,
+				)
+
 				questionCnt++
 			} else {
+				// TODO: Remove the notification logic
 				message, err := NewNotifyMsg("You're wrong haha!")
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				message, err = NewGuessResponseMsg(false, "You're wrong haha!")
+				if err != nil {
+					log.Fatal(err)
+				}
+
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -211,7 +263,19 @@ func GameEnd(room *Room, player Player) {
 	room.Winner = player
 	room.Status = End
 
-	message, err := NewStateMsg("Game ended!!!", player.GetName(), player.GetName(), RoomStateToString(End))
+	playersNames := make([]string, 0)
+	for p, active := range room.Players {
+		if active {
+			playersNames = append(playersNames, p.GetName())
+		}
+	}
+	message, err := NewStateMsg(
+		"Game ended!!!",
+		player.GetName(),
+		player.GetName(),
+		RoomStateToString(End),
+		playersNames,
+	)
 	err = player.Send(message)
 	if err != nil {
 		log.Println("[ERROR] Failed to receive end game state")

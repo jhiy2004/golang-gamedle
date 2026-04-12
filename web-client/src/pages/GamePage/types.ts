@@ -5,4 +5,5 @@ export type GamePageProps = {
     handleAnswerSend: () => void;
     players: string[];
     playersStatus: Record<string, number>;
+    player: string;
 }

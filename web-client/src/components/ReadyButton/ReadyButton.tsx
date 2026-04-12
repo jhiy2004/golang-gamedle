@@ -1,14 +1,14 @@
 import type { ReadyButtonProps } from "./types"
-import styles from "./ReadyButton.module.css"
+import Button from "../Button/Button"
 
 function ReadyButton({ isReady = false, onToggle }: ReadyButtonProps) {
     return (
-        <button
-            onClick={onToggle}
-            className={`${styles.button} ${isReady ? styles.cancel : styles.ready}`}
-        >
-            {isReady ? "Cancel" : "Ready"}
-        </button>    )
+        <Button
+            value={ isReady ? "Cancel" : "Ready" }
+            type={ isReady ? "cancel" : "ready" }
+            handleOnClick={onToggle}
+        />
+    )
 }
 
 export default ReadyButton

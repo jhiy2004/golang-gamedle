@@ -9,14 +9,25 @@ type Message struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+type GuessResponseMsg struct {
+	Correct bool   `json:"correct"`
+	Text    string `json:"text"`
+}
+
+type PlayerStatusMsg struct {
+	Player   string `json:"player"`
+	Progress int    `json:"progress"`
+}
+
 type NotifyMsg struct {
 	Text string `json:"text"`
 }
 
 type StateMsg struct {
-	Question string `json:"question"`
-	Winner   string `json:"winner"`
-	State    string `json:"state"`
+	Players  []string `json:"players"`
+	Question string   `json:"question"`
+	Winner   string   `json:"winner"`
+	State    string   `json:"state"`
 }
 
 type GuessMsg struct {
@@ -37,6 +48,44 @@ type StartMsg struct {
 type ReadyMsg struct{}
 
 type CancelMsg struct{}
+
+func NewGuessResponseMsg(correct bool, text string) (*Message, error) {
+	msg := GuessResponseMsg{
+		Correct: correct,
+		Text:    text,
+	}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "guessResponse",
+		Payload: content,
+	}
+
+	return &base, nil
+}
+
+func NewPlayerStatusMsg(player string, progress int) (*Message, error) {
+	msg := PlayerStatusMsg{
+		Player:   player,
+		Progress: progress,
+	}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "playerStatus",
+		Payload: content,
+	}
+
+	return &base, nil
+}
 
 func NewLobbyMsg(currPlayers, readyPlayers int) (*Message, error) {
 	msg := LobbyMsg{
@@ -145,8 +194,9 @@ func NewNotifyMsg(text string) (*Message, error) {
 	return &base, nil
 }
 
-func NewStateMsg(question, player, winner, state string) (*Message, error) {
+func NewStateMsg(question, player, winner, state string, players []string) (*Message, error) {
 	msg := StateMsg{
+		Players:  players,
 		Question: question,
 		Winner:   winner,
 		State:    state,

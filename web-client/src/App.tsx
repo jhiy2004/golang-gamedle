@@ -13,6 +13,10 @@ function App() {
   const [maxPlayers, setMaxPlayers] = useState<number>(0)
   const [currPlayers, setCurrPlayers] = useState<number>(0)
   const [players, setPlayers] = useState<string[]>([])
+
+  // Current client player name
+  const [player, setPlayer] = useState<string>('')
+
   const [question, setQuestion] = useState<string>('')
   const [winner, setWinner] = useState<string>('')
   const [state, setState] = useState<string>('')
@@ -56,6 +60,7 @@ function App() {
       case 'start':
         setMinPlayers(message.payload.minPlayers);
         setMaxPlayers(message.payload.maxPlayers);
+        setPlayer(message.payload.playerName);
         break;
       case 'notify':
         console.log(message.payload.text);
@@ -92,6 +97,10 @@ function App() {
 
     wsRef.current = websocket;
 
+    websocket.addEventListener("error", (event) => {
+      console.log("WebSocket error: ", event);
+    });
+
     websocket.onopen = () => {
       console.log("Connected");
     };
@@ -125,9 +134,13 @@ function App() {
       handleAnswerSend={handleAnswerSend}
       players={players}
       playersStatus={playersStatus}
+      player={player}
     />
   } else if (state === 'end') {
-    return <EndGamePage/>
+    return <EndGamePage
+      winner={winner}
+      player={player}
+    />
   }
 }
 

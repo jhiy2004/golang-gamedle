@@ -1,29 +1,16 @@
+import Button from "../../components/Button/Button"
+import MainCard from "../../components/MainCard/MainCard"
 import type { GamePageProps } from "./types"
-import styles from "../../components/ReadyButton/ReadyButton.module.css"
 
-function GamePage({ question, answer, setAnswer, handleAnswerSend, players, playersStatus}: GamePageProps) {
+function GamePage({ question, answer, setAnswer, handleAnswerSend, players, playersStatus, player }: GamePageProps) {
+  const sortedPlayers = [
+    player,
+    ...players.filter(p => p !== player)
+  ]
+
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        minHeight: "100vh",
-        backgroundColor: "#f3f4f6",
-      }}
-    >
-      <section
-        style={{
-          width: 320,
-          borderRadius: "16px",
-          overflow: "hidden",
-
-          backgroundColor: "white",
-          boxShadow: "0 10px 25px rgba(0, 0, 0, 0.15)",
-
-          paddingBottom: "12px",
-        }}
-      >
+    <MainCard>
+      <div>
         <div style={{ padding: "10px" }}>
           <div>
             <h1>Question</h1>
@@ -49,6 +36,7 @@ function GamePage({ question, answer, setAnswer, handleAnswerSend, players, play
                     handleAnswerSend()
                   }
                 }}
+                autoFocus
               />
             </div>
             <div
@@ -58,18 +46,22 @@ function GamePage({ question, answer, setAnswer, handleAnswerSend, players, play
                 marginTop: "10px",
               }}
             >
-              <button className={`${styles.button} ${styles.ready}`} onClick={handleAnswerSend}>Send Answer</button>
+              <Button
+                value="Send Answer"
+                type="ready"
+                handleOnClick={handleAnswerSend}
+              />
             </div>
           </div>
 
           <div>
-            {players.map((player) => {
-              return <p key={player}>{player}  {'*'.repeat(playersStatus[player] ?? 0)}</p>
+            {sortedPlayers.map((p) => {
+              return <p key={p}>{(player !== p) ? p : `${p} (You)`}  {'*'.repeat(playersStatus[p] ?? 0)}</p>
             })}
           </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </MainCard>
   )
 }
 

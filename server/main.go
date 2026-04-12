@@ -210,6 +210,10 @@ func startServerCallback(room *game.Room, mydb *sql.DB, rng *rand.Rand, config *
 						continue
 					}
 					p.Send(tui.StateMsg{State: msg})
+				case "playerStatus":
+					continue
+				case "guessResponse":
+					continue
 				default:
 					msgCh <- response
 				}
