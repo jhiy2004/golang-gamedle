@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import EndGamePage from "./pages/EndGamePage"
-import GamePage from "./pages/GamePage"
+import EndGamePage from "./pages/EndGamePage/EndGamePage"
+import GamePage from "./pages/GamePage/GamePage"
 import LobbyPage from "./pages/LobbyPage/LobbyPage"
-import { createCancelMsg, createReadyMsg, type LobbyMsg, type Message, type NotifyMsg, type StartMsg, type StateMsg } from "./game/message";
+import { createCancelMsg, createGuessMsg, createReadyMsg, type Message } from "./game/message";
 
 function App() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -15,6 +15,7 @@ function App() {
   const [question, setQuestion] = useState('')
   const [winner, setWinner] = useState('')
   const [state, setState] = useState('')
+  const [answer, setAnswer] = useState('')
 
   function handleReadyClick() {
     if (!wsRef.current) return;
@@ -22,6 +23,24 @@ function App() {
 
     if (ready) {
       const msg = createCancelMsg()
+      websocket.send(JSON.stringify(msg))
+    } else {
+      const msg = createReadyMsg()
+      websocket.send(JSON.stringify(msg))
+    }
+
+    setReady(!ready)
+  }
+
+  function handleAnswerSend() {
+    if (!wsRef.current) {
+      return
+    }
+
+    const websocket = wsRef.current
+
+    if (ready) {
+      const msg = createGuessMsg(answer)
       websocket.send(JSON.stringify(msg))
     } else {
       const msg = createReadyMsg()
@@ -89,7 +108,13 @@ function App() {
         currPlayers={currPlayers}
       />
   } else if(state === 'playing') {
-    return <GamePage/>
+    return <GamePage
+      question={question}
+      setAnswer={setAnswer}
+      handleAnswerSend={handleAnswerSend}
+    />
+  } else if (state === 'end') {
+    return <EndGamePage/>
   }
 }
 
