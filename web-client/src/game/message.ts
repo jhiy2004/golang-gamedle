@@ -1,3 +1,19 @@
+export type GuessResponseMsg = {
+    cmd: 'guessResponse';
+    payload: {
+        correct: boolean;
+        text: string;
+    }
+}
+
+export type PlayerStatusMsg = {
+    cmd: 'playerStatus';
+    payload: {
+        player: string;
+        progress: number;
+    }
+}
+
 export type NotifyMsg = {
     cmd: 'notify';
     payload: {
@@ -11,6 +27,7 @@ export type StateMsg = {
         question: string;
         winner: string;
         state: string;
+        players: string[];
     }
 }
 
@@ -59,6 +76,8 @@ export type Message =
     | StartMsg
     | ReadyMsg
     | CancelMsg
+    | PlayerStatusMsg
+    | GuessResponseMsg
 
 export function createLobbyMsg(currPlayers: number, readyPlayers: number): LobbyMsg {
     const lobbyMsg: LobbyMsg = {
@@ -84,13 +103,14 @@ export function createNotifyMsg(text: string): NotifyMsg {
     return notifyMsg
 }
 
-export function createStateMsg(question: string, winner: string, state: string): StateMsg {
+export function createStateMsg(question: string, winner: string, state: string, players: string[]): StateMsg {
     const stateMsg: StateMsg = {
         cmd: 'state',
         payload: {
             question,
             winner,
             state,
+            players,
         }
     } 
     

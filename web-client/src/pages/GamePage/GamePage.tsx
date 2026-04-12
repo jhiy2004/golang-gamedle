@@ -1,7 +1,7 @@
 import type { GamePageProps } from "./types"
 import styles from "../../components/ReadyButton/ReadyButton.module.css"
 
-function GamePage({ question, setAnswer, handleAnswerSend }: GamePageProps) {
+function GamePage({ question, answer, setAnswer, handleAnswerSend, players, playersStatus}: GamePageProps) {
   return (
     <div
       style={{
@@ -42,7 +42,13 @@ function GamePage({ question, setAnswer, handleAnswerSend }: GamePageProps) {
                   width: "100%",
                 }}
                 type="text"
+                value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAnswerSend()
+                  }
+                }}
               />
             </div>
             <div
@@ -54,6 +60,12 @@ function GamePage({ question, setAnswer, handleAnswerSend }: GamePageProps) {
             >
               <button className={`${styles.button} ${styles.ready}`} onClick={handleAnswerSend}>Send Answer</button>
             </div>
+          </div>
+
+          <div>
+            {players.map((player) => {
+              return <p key={player}>{player}  {'*'.repeat(playersStatus[player] ?? 0)}</p>
+            })}
           </div>
         </div>
       </section>

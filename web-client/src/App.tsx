@@ -8,14 +8,16 @@ function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const [ready, setReady] = useState(false)
 
-  const [readyPlayers, setReadyPlayers] = useState(0)
-  const [minPlayers, setMinPlayers] = useState(0)
-  const [maxPlayers, setMaxPlayers] = useState(0)
-  const [currPlayers, setCurrPlayers] = useState(0)
-  const [question, setQuestion] = useState('')
-  const [winner, setWinner] = useState('')
-  const [state, setState] = useState('')
-  const [answer, setAnswer] = useState('')
+  const [readyPlayers, setReadyPlayers] = useState<number>(0)
+  const [minPlayers, setMinPlayers] = useState<number>(0)
+  const [maxPlayers, setMaxPlayers] = useState<number>(0)
+  const [currPlayers, setCurrPlayers] = useState<number>(0)
+  const [players, setPlayers] = useState<string[]>([])
+  const [question, setQuestion] = useState<string>('')
+  const [winner, setWinner] = useState<string>('')
+  const [state, setState] = useState<string>('')
+  const [answer, setAnswer] = useState<string>('')
+  const [playersStatus, setPlayersStatus] = useState<Record<string, number>>({})
 
   function handleReadyClick() {
     if (!wsRef.current) return;
@@ -39,15 +41,10 @@ function App() {
 
     const websocket = wsRef.current
 
-    if (ready) {
-      const msg = createGuessMsg(answer)
-      websocket.send(JSON.stringify(msg))
-    } else {
-      const msg = createReadyMsg()
-      websocket.send(JSON.stringify(msg))
-    }
+    const msg = createGuessMsg(answer)
+    websocket.send(JSON.stringify(msg))
 
-    setReady(!ready)
+    setAnswer('')
   }
 
   function handleServerResponse(message: Message) {
@@ -67,12 +64,25 @@ function App() {
         setQuestion(message.payload.question);
         setWinner(message.payload.winner);
         setState(message.payload.state);
+        setPlayers(message.payload.players);
         break;
-
+      case 'playerStatus':
+        setPlayersStatus(prev => ({
+          ...prev,
+          [message.payload.player]: message.payload.progress
+        }));
+        break;
+      case 'guessResponse':
+        alert(message.payload.text)
+        break;
       default:
         console.log("Unhandled message");
     }
   }
+
+  useEffect(() => {
+    console.log(playersStatus)
+  }, [playersStatus])
 
   useEffect(() => {
     if (wsRef.current) return;
@@ -110,8 +120,11 @@ function App() {
   } else if(state === 'playing') {
     return <GamePage
       question={question}
+      answer={answer}
       setAnswer={setAnswer}
       handleAnswerSend={handleAnswerSend}
+      players={players}
+      playersStatus={playersStatus}
     />
   } else if (state === 'end') {
     return <EndGamePage/>
