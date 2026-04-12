@@ -1,12 +1,17 @@
-import banner from "../assets/banner.jpg"
+import banner from "../../assets/banner.jpg"
 
-import ReadyButton from "../components/ReadyButton/ReadyButton"
-import LobbyHeader from "../components/LobbyHeader/LobbyHeader"
-import { useState } from "react";
+import ReadyButton from "../../components/ReadyButton/ReadyButton"
+import LobbyHeader from "../../components/LobbyHeader/LobbyHeader"
+import type { LobbyPageProps } from "./types"
 
-function LobbyPage() {
-  const [ready, setReady] = useState(false)
-
+function LobbyPage({
+  ready,
+  handleReadyClick,
+  readyPlayers,
+  minPlayers,
+  maxPlayers,
+  currPlayers,
+}: LobbyPageProps) {
   return (
     <div
       style={{
@@ -40,7 +45,12 @@ function LobbyPage() {
         />
 
         <div style={{ padding: "10px" }}>
-          <LobbyHeader />
+          <LobbyHeader 
+            readyPlayers={readyPlayers}
+            minPlayers={minPlayers}
+            maxPlayers={maxPlayers}
+            currPlayers={currPlayers}
+          />
 
           <div
             style={{
@@ -51,7 +61,7 @@ function LobbyPage() {
           >
             <ReadyButton
               isReady={ready}
-              onToggle={() => setReady(!ready)}
+              onToggle={handleReadyClick}
             />
           </div>
         </div>

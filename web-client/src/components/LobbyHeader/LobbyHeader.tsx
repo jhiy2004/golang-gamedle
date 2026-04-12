@@ -1,12 +1,14 @@
 import { useState } from "react"
 import RoomSpan from "../RoomSpan/RoomSpan"
 import styles from "./LobbyHeader.module.css"
+import type { LobbyHeaderProps } from "./types";
 
-function LobbyHeader() {
-    const [readyPlayers, setReadyPlayers] = useState(0)
-    const [minPlayers, setMinPlayers] = useState(0)
-    const [maxPlayers, setMaxPlayers] = useState(0)
-    const [currPlayers, setCurrPlayers] = useState(0)
+function LobbyHeader({
+  readyPlayers,
+  minPlayers,
+  maxPlayers,
+  currPlayers,
+}: LobbyHeaderProps) {
 
     const readyPlayersRatio = `Ready: ${readyPlayers} / ${currPlayers}`;
 
