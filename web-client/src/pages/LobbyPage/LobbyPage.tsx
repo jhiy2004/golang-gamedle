@@ -1,6 +1,6 @@
 import banner from "../../assets/banner.jpg"
 
-import ReadyButton from "../../components/ReadyButton/ReadyButton"
+import ToggleButton from "../../components/ToggleButton/ToggleButton"
 import LobbyHeader from "../../components/LobbyHeader/LobbyHeader"
 import type { LobbyPageProps } from "./types"
 import MainCard from "../../components/MainCard/MainCard"
@@ -41,9 +41,10 @@ function LobbyPage({
               marginTop: "10px",
             }}
           >
-            <ReadyButton
-              isReady={ready}
+            <ToggleButton
+              isToggled={ready}
               onToggle={handleReadyClick}
+              toggleText="Ready"
             />
           </div>
         </div>

@@ -1,3 +1,11 @@
+export type PostGameLobbyMsg = {
+    cmd: 'postGameLobby';
+    payload: {
+        retryPlayers: number;
+        currPlayers: number;
+    }
+}
+
 export type GuessResponseMsg = {
     cmd: 'guessResponse';
     payload: {
@@ -65,7 +73,24 @@ export type CancelMsg = {
     cmd: 'cancel';
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     payload: {}
+}
 
+export type RetryMsg = {
+    cmd: 'retry';
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+    payload: {}
+}
+
+export type CancelRetryMsg = {
+    cmd: 'cancelRetry';
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+    payload: {}
+}
+
+export type RestartMsg = {
+    cmd: 'restart';
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+    payload: {}
 }
 
 export type Message =
@@ -78,6 +103,10 @@ export type Message =
     | CancelMsg
     | PlayerStatusMsg
     | GuessResponseMsg
+    | PostGameLobbyMsg
+    | RetryMsg
+    | CancelRetryMsg
+    | RestartMsg
 
 export function createLobbyMsg(currPlayers: number, readyPlayers: number): LobbyMsg {
     const lobbyMsg: LobbyMsg = {
@@ -158,4 +187,23 @@ export function createCancelMsg(): CancelMsg {
     }
     
     return cancelMsg
+}
+
+
+export function createRetryMsg(): RetryMsg {
+    const retryMsg: RetryMsg = {
+        cmd: 'retry',
+        payload: { }
+    }
+    
+    return retryMsg
+}
+
+export function createCancelRetryMsg(): CancelRetryMsg {
+    const cancelRetryMsg: CancelRetryMsg = {
+        cmd: 'cancelRetry',
+        payload: {}
+    }
+    
+    return cancelRetryMsg
 }

@@ -8,10 +8,15 @@ import {
   RouterProvider
 } from 'react-router-dom'
 import EnterRoomPage from './pages/EnterRoomPage/EnterRoomPage'
+import CreateRoomPage from './pages/CreateRoomPage/CreateRoomPage.tsx'
 
 const router = createBrowserRouter([
   {
-    path: "/enter",
+    path: "/create",
+    element: <CreateRoomPage />
+  },
+  {
+    path: "/",
     element: <EnterRoomPage />
   },
   {

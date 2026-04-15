@@ -1,112 +1,131 @@
 package game
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 )
 
-func handlePlayerReady(room *Room, player Player, msgCh chan *Message) bool {
-	return handlePlayerWaitInput(room, player, msgCh, Playing)
-}
+func handlePlayerRetry(room *Room, player Player, msg *Message) {
+	if msg.Cmd == "retry" {
+		log.Println("Retry Message")
+		changed := room.PlayerRetry(player)
 
-func handlePlayerRetry(room *Room, player Player, msgCh chan *Message) bool {
-	return handlePlayerWaitInput(room, player, msgCh, Waiting)
-}
+		if !changed {
+			message, err := NewNotifyMsg("You already was retry")
+			if err != nil {
+				log.Fatal(err)
+			}
+			player.Send(message)
+		}
 
-func handlePlayerWaitInput(room *Room, player Player, msgCh chan *Message, nextStatus RoomState) bool {
-	select {
-	case <-room.WaitReady():
-		room.Mu.Lock()
-		room.Status = nextStatus
-		room.Mu.Unlock()
-
-		message, err := NewNotifyMsg("Game is about to start")
+		message, err := NewNotifyMsg(fmt.Sprintf("Player %s is retry", player.GetName()))
 		if err != nil {
 			log.Fatal(err)
 		}
 		room.Broadcast(player, message)
-	case msg, ok := <-msgCh:
-		log.Println(msg)
-		if !ok {
-			log.Println("OMG")
-			return false
-		}
+	} else if msg.Cmd == "cancelRetry" {
+		log.Println("Cancel Retry message")
 
-		if msg.Cmd == "ready" {
-			log.Println("Ready message")
-			changed := room.PlayerReady(player)
+		changed := room.PlayerCancelRetry(player)
 
-			if !changed {
-				message, err := NewNotifyMsg("You already was ready")
-				if err != nil {
-					log.Fatal(err)
-				}
-				player.Send(message)
-				return true
-			}
-
-			message, err := NewNotifyMsg(fmt.Sprintf("Player %s is ready", player.GetName()))
+		if !changed {
+			message, err := NewNotifyMsg("You already was not retry")
 			if err != nil {
 				log.Fatal(err)
 			}
-			room.Broadcast(player, message)
-		} else if msg.Cmd == "cancel" {
-			log.Println("Cancel message")
-
-			changed := room.PlayerCancel(player)
-
-			if !changed {
-				message, err := NewNotifyMsg("You already was not ready")
-				if err != nil {
-					log.Fatal(err)
-				}
-				player.Send(message)
-				return true
-			}
-
-			message, err := NewNotifyMsg(fmt.Sprintf("Player %s cancelled ready operation", player.GetName()))
-			if err != nil {
-				log.Fatal(err)
-			}
-			room.Broadcast(player, message)
+			player.Send(message)
 		}
 
-		message, err := NewLobbyMsg(room.CurrPlayers, room.ReadyPlayers)
+		message, err := NewNotifyMsg(fmt.Sprintf("Player %s cancelled retry operation", player.GetName()))
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = player.Send(message)
-		if err != nil {
-			log.Println(err)
-		}
-		room.Broadcast(nil, message)
+		room.Broadcast(player, message)
 	}
 
-	return true
+	message, err := NewPostGameLobbyMsg(room.CurrPlayers, room.RetryPlayers)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = player.Send(message)
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println(message)
+	room.Broadcast(nil, message)
 }
 
-func Gameplay(room *Room, player Player, msgCh chan *Message, mydb *sql.DB, rng *rand.Rand, qtd int) {
-	for {
-		err := GameLobby(room, player, msgCh)
-		if err != nil {
-			return
+func handlePlayerReady(room *Room, player Player, msg *Message) {
+	if msg.Cmd == "ready" {
+		log.Println("Ready message")
+		changed := room.PlayerReady(player)
+
+		if !changed {
+			message, err := NewNotifyMsg("You already was ready")
+			if err != nil {
+				log.Fatal(err)
+			}
+			player.Send(message)
 		}
 
-		err = GameQuestions(room, player, msgCh)
+		message, err := NewNotifyMsg(fmt.Sprintf("Player %s is ready", player.GetName()))
 		if err != nil {
-			return
+			log.Fatal(err)
+		}
+		room.Broadcast(player, message)
+	} else if msg.Cmd == "cancel" {
+		log.Println("Cancel message")
+
+		changed := room.PlayerCancel(player)
+
+		if !changed {
+			message, err := NewNotifyMsg("You already was not ready")
+			if err != nil {
+				log.Fatal(err)
+			}
+			player.Send(message)
 		}
 
-		// TODO: Estudar uma ideia melhor de reiniciar o jogo
-		err = GameEnd(room, player, msgCh, mydb, rng, qtd)
+		message, err := NewNotifyMsg(fmt.Sprintf("Player %s cancelled ready operation", player.GetName()))
 		if err != nil {
-			return
+			log.Fatal(err)
 		}
+		room.Broadcast(player, message)
 	}
+
+	message, err := NewLobbyMsg(room.CurrPlayers, room.ReadyPlayers)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = player.Send(message)
+	if err != nil {
+		log.Println(err)
+	}
+
+	log.Println(message)
+	room.Broadcast(nil, message)
+}
+
+func Gameplay(room *Room, player Player, msgCh chan *Message) error {
+	err := GameLobby(room, player, msgCh)
+	if err != nil {
+		return err
+	}
+
+	err = GameQuestions(room, player, msgCh)
+	if err != nil {
+		return err
+	}
+
+	err = GameEnd(room, player, msgCh)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func GameLobby(room *Room, player Player, msgCh chan *Message) error {
@@ -132,16 +151,30 @@ func GameLobby(room *Room, player Player, msgCh chan *Message) error {
 	}
 	room.Broadcast(nil, message)
 
-	for room.GetStatus() == Waiting {
+	for {
 		room.WaitMinReached()
 
-		ok := handlePlayerReady(room, player, msgCh)
-		if !ok {
-			return errors.New("Error at the lobby")
+		select {
+		case <-room.WaitReady():
+
+			room.Mu.Lock()
+			room.Status = Playing
+			room.Mu.Unlock()
+
+			message, err := NewNotifyMsg("Game is about to start")
+			if err != nil {
+				log.Fatal(err)
+			}
+			room.Broadcast(player, message)
+			return nil
+
+		case msg, ok := <-msgCh:
+			if !ok {
+				return errors.New("Error at the lobby")
+			}
+			handlePlayerReady(room, player, msg)
 		}
 	}
-
-	return nil
 }
 
 func GameQuestions(room *Room, player Player, msgCh chan *Message) error {
@@ -171,7 +204,6 @@ func GameQuestions(room *Room, player Player, msgCh chan *Message) error {
 
 		message, err := NewStateMsg(
 			room.Questions[currQuestion].Question,
-			player.GetName(),
 			"",
 			RoomStateToString(room.Status),
 			playersNames,
@@ -269,7 +301,7 @@ func GameQuestions(room *Room, player Player, msgCh chan *Message) error {
 	return nil
 }
 
-func GameEnd(room *Room, player Player, msgCh chan *Message, mydb *sql.DB, rng *rand.Rand, qtd int) error {
+func GameEnd(room *Room, player Player, msgCh chan *Message) error {
 	log.Println("Game End")
 
 	ok := room.EndGame(player)
@@ -282,7 +314,6 @@ func GameEnd(room *Room, player Player, msgCh chan *Message, mydb *sql.DB, rng *
 		}
 		message, err := NewStateMsg(
 			"Game ended!!!",
-			player.GetName(),
 			player.GetName(),
 			RoomStateToString(End),
 			playersNames,
@@ -311,31 +342,22 @@ func GameEnd(room *Room, player Player, msgCh chan *Message, mydb *sql.DB, rng *
 		}
 
 		room.Broadcast(player, message)
-
-		// O jogador que ganhou a partida se torna responsavel
-		// por inicializar a goroutine que aguarda todos clicarem
-		// em retry para reiniciar o jogo
-		go func() {
-			<-room.WaitReady()
-			room.Reset()
-			room.Start(mydb, rng, qtd)
-		}()
-	}
-
-	// TODO: Atualmente estou aproveitando as variaveis e logica para ready para implementar o retry
-	// Talvez mudar no futuro
-	if player.IsReady() {
-		player.ToggleReady()
 	}
 
 	// Retry
-	for room.GetStatus() == End {
+	retryCh := room.WaitRetry()
+	for {
 		log.Println("Iter")
-		ok := handlePlayerRetry(room, player, msgCh)
-		if !ok {
-			return errors.New("Error at end game")
+
+		select {
+		case <-retryCh:
+			return nil
+
+		case msg, ok := <-msgCh:
+			if !ok {
+				return errors.New("Error at end game")
+			}
+			handlePlayerRetry(room, player, msg)
 		}
 	}
-
-	return nil
 }

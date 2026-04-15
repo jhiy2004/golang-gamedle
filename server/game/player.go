@@ -11,20 +11,27 @@ type Player interface {
 	Send(msg *Message) error
 	Receive() (*Message, error)
 	GetName() string
+
 	IsReady() bool
 	ToggleReady() bool
+
+	IsRetry() bool
+	ToggleRetry() bool
+	Reset()
 }
 
 type WSPlayer struct {
 	Conn  *websocket.Conn
 	Name  string
 	Ready bool
+	Retry bool
 	Mu    *sync.Mutex
 }
 
 type HostPlayer struct {
 	Name    string
 	Ready   bool
+	Retry   bool
 	Channel chan []byte
 }
 
@@ -69,6 +76,21 @@ func (p *WSPlayer) IsReady() bool {
 	return p.Ready
 }
 
+func (p *WSPlayer) ToggleRetry() bool {
+	p.Retry = !p.Retry
+
+	return p.Retry
+}
+
+func (p *WSPlayer) IsRetry() bool {
+	return p.Retry
+}
+
+func (p *WSPlayer) Reset() {
+	p.Ready = false
+	p.Retry = false
+}
+
 func (p *HostPlayer) Send(msg *Message) error {
 	content, err := json.Marshal(msg)
 	if err != nil {
@@ -104,4 +126,19 @@ func (p *HostPlayer) ToggleReady() bool {
 
 func (p *HostPlayer) IsReady() bool {
 	return p.Ready
+}
+
+func (p *HostPlayer) ToggleRetry() bool {
+	p.Retry = !p.Retry
+
+	return p.Retry
+}
+
+func (p *HostPlayer) IsRetry() bool {
+	return p.Retry
+}
+
+func (p *HostPlayer) Reset() {
+	p.Ready = false
+	p.Retry = false
 }

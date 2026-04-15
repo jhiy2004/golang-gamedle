@@ -45,9 +45,87 @@ type StartMsg struct {
 	PlayerName string `json:"playerName"`
 }
 
+type PostGameLobbyMsg struct {
+	CurrPlayers  int `json:"currPlayers"`
+	RetryPlayers int `json:"retryPlayers"`
+}
+
 type ReadyMsg struct{}
 
 type CancelMsg struct{}
+
+type RetryMsg struct{}
+
+type CancelRetryMsg struct{}
+
+type RestartMsg struct{}
+
+func NewRestartMsg() (*Message, error) {
+	msg := RestartMsg{}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "restart",
+		Payload: content,
+	}
+
+	return &base, nil
+}
+
+func NewRetryMsg() (*Message, error) {
+	msg := RetryMsg{}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "retry",
+		Payload: content,
+	}
+
+	return &base, nil
+}
+
+func NewCancelRetryMsg() (*Message, error) {
+	msg := CancelRetryMsg{}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "cancelRetry",
+		Payload: content,
+	}
+
+	return &base, nil
+}
+
+func NewPostGameLobbyMsg(currPlayers, retryPlayers int) (*Message, error) {
+	msg := PostGameLobbyMsg{
+		CurrPlayers:  currPlayers,
+		RetryPlayers: retryPlayers,
+	}
+
+	content, err := json.Marshal(&msg)
+	if err != nil {
+		return nil, err
+	}
+
+	base := Message{
+		Cmd:     "postGameLobby",
+		Payload: content,
+	}
+
+	return &base, nil
+}
 
 func NewGuessResponseMsg(correct bool, text string) (*Message, error) {
 	msg := GuessResponseMsg{
@@ -194,7 +272,7 @@ func NewNotifyMsg(text string) (*Message, error) {
 	return &base, nil
 }
 
-func NewStateMsg(question, player, winner, state string, players []string) (*Message, error) {
+func NewStateMsg(question, winner, state string, players []string) (*Message, error) {
 	msg := StateMsg{
 		Players:  players,
 		Question: question,

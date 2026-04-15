@@ -22,6 +22,7 @@ const (
 	Waiting RoomState = iota
 	Playing
 	End
+	Restarting
 )
 
 const (
@@ -43,15 +44,29 @@ type Room struct {
 	Questions                           map[int]db.QuestionAnswersDTO
 	QuestionsOrder                      []int
 	ReadyPlayers                        int
+	RetryPlayers                        int
 	Winner                              Player
 
 	MinReached *sync.Cond
 	Ready      chan struct{}
 	IsEnded    chan struct{}
+	Retry      chan struct{}
 }
 
 func GenerateRoomUUID() string {
 	return uuid.NewString()
+}
+
+func (r *Room) TryRestart() bool {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	if r.Status != End {
+		return false
+	}
+
+	r.Status = Restarting
+	return true
 }
 
 func (r *Room) EndGame(player Player) bool {
@@ -64,11 +79,7 @@ func (r *Room) EndGame(player Player) bool {
 
 	r.Winner = player
 	r.Status = End
-
-	// Reset variaveis para logica de ready
-	r.ReadyPlayers = 0
-	r.Ready = make(chan struct{})
-	close(r.IsEnded)
+	r.SignalIsEnded()
 
 	return true
 }
@@ -83,8 +94,18 @@ func (r *Room) Reset() {
 	r.Status = Waiting
 	r.ReadyPlayers = 0
 	r.Ready = make(chan struct{})
+	r.RetryPlayers = 0
+	r.Retry = make(chan struct{})
 	r.IsEnded = make(chan struct{})
 	r.Winner = &WSPlayer{}
+
+	for player, connected := range r.Players {
+		if !connected {
+			continue
+		}
+
+		player.Reset()
+	}
 }
 
 func (r *Room) Start(mydb *sql.DB, rng *rand.Rand, qtd int) error {
@@ -157,8 +178,10 @@ func NewRoom(conf *RoomConfig) *Room {
 		Questions:      make(map[int]db.QuestionAnswersDTO, conf.QuestionsCount),
 		QuestionsOrder: make([]int, 0, conf.QuestionsCount),
 		ReadyPlayers:   0,
+		RetryPlayers:   0,
 		MinReached:     sync.NewCond(mutex),
 		Ready:          make(chan struct{}),
+		Retry:          make(chan struct{}),
 		IsEnded:        make(chan struct{}),
 		Mu:             mutex,
 	}
@@ -171,6 +194,43 @@ func (r *Room) GetStatus() RoomState {
 	defer r.Mu.Unlock()
 
 	return r.Status
+}
+
+func (r *Room) PlayerRetry(player Player) bool {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	_, ok := r.Players[player]
+	if !ok {
+		log.Fatal("[ERROR] there should be an entry for all players")
+	}
+
+	if !player.IsRetry() {
+		player.ToggleRetry()
+		r.RetryPlayers++
+
+		if r.RetryPlayers == r.CurrPlayers {
+			r.SignalRetry()
+		}
+
+		return true
+	}
+
+	return false
+}
+
+func (r *Room) PlayerCancelRetry(player Player) bool {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	if r.RetryPlayers > 0 && player.IsRetry() {
+		player.ToggleRetry()
+		r.RetryPlayers--
+
+		return true
+	}
+
+	return false
 }
 
 func (r *Room) PlayerReady(player Player) bool {
@@ -211,12 +271,26 @@ func (r *Room) WaitIsEnded() <-chan struct{} {
 	return r.IsEnded
 }
 
+func (r *Room) SignalIsEnded() {
+	close(r.IsEnded)
+}
+
 func (r *Room) WaitReady() <-chan struct{} {
 	return r.Ready
 }
 
 func (r *Room) SignalReady() {
 	close(r.Ready)
+}
+
+func (r *Room) WaitRetry() <-chan struct{} {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+	return r.Retry
+}
+
+func (r *Room) SignalRetry() {
+	close(r.Retry)
 }
 
 func (r *Room) WaitMinReached() {
@@ -227,7 +301,6 @@ func (r *Room) WaitMinReached() {
 		r.MinReached.Wait()
 	}
 }
-
 func (r *Room) SignalMinReached() {
 	r.MinReached.Broadcast()
 }

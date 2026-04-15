@@ -1,9 +1,12 @@
-import Button from "../../components/Button/Button";
 import MainCard from "../../components/MainCard/MainCard";
+import ToggleButton from "../../components/ToggleButton/ToggleButton";
+import RoomSpan from "../../components/RoomSpan/RoomSpan";
 import type { EndGamePageProps } from "./types"
 
-function EndGamePage({ winner, player }: EndGamePageProps) {
+function EndGamePage({ winner, player, retry, retryPlayers, currPlayers, handleRetryClick}: EndGamePageProps) {
   const isWinner = winner === player;
+
+  const retryPlayersRatio = `Ready: ${retryPlayers} / ${currPlayers}`;
 
   return (
     <MainCard>
@@ -20,12 +23,29 @@ function EndGamePage({ winner, player }: EndGamePageProps) {
             : "Better luck next time — try again!"}
         </p>
 
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            marginTop: "10px",
+          }}
+        >
+          <RoomSpan text={retryPlayersRatio} variant="ready"/>
+        </div>
 
-        <Button
-          value="Retry"
-          type="ready"
-          handleOnClick={() => console.log("Clicked retry")}
-        />
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            marginTop: "10px",
+          }}
+        >
+          <ToggleButton
+            isToggled={retry}
+            onToggle={handleRetryClick}
+            toggleText="Retry"
+          />
+        </div>
       </div>
     </MainCard>
   )

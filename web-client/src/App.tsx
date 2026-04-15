@@ -2,16 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import EndGamePage from "./pages/EndGamePage/EndGamePage"
 import GamePage from "./pages/GamePage/GamePage"
 import LobbyPage from "./pages/LobbyPage/LobbyPage"
-import { createCancelMsg, createGuessMsg, createReadyMsg, type Message } from "./game/message";
+import { createCancelMsg, createCancelRetryMsg, createGuessMsg, createReadyMsg, createRetryMsg, type Message } from "./game/message";
 import { useParams } from "react-router-dom";
 
 function App() {
   const { id } = useParams()
 
   const wsRef = useRef<WebSocket | null>(null);
+
   const [ready, setReady] = useState(false)
+  const [retry, setRetry] = useState(false)
 
   const [readyPlayers, setReadyPlayers] = useState<number>(0)
+  const [retryPlayers, setRetryPlayers] = useState<number>(0)
+
   const [minPlayers, setMinPlayers] = useState<number>(0)
   const [maxPlayers, setMaxPlayers] = useState<number>(0)
   const [currPlayers, setCurrPlayers] = useState<number>(0)
@@ -26,17 +30,33 @@ function App() {
   const [answer, setAnswer] = useState<string>('')
   const [playersStatus, setPlayersStatus] = useState<Record<string, number>>({})
 
+
+  function handleRetryClick() {
+    if (!wsRef.current) return;
+
+    const websocket = wsRef.current
+
+    let msg
+    if (retry) {
+      msg = createCancelRetryMsg()
+    } else {
+      msg = createRetryMsg()
+    }
+    websocket.send(JSON.stringify(msg))
+    setRetry(!retry)
+  }
+
   function handleReadyClick() {
     if (!wsRef.current) return;
     const websocket = wsRef.current
 
+    let msg
     if (ready) {
-      const msg = createCancelMsg()
-      websocket.send(JSON.stringify(msg))
+      msg = createCancelMsg()
     } else {
-      const msg = createReadyMsg()
-      websocket.send(JSON.stringify(msg))
+      msg = createReadyMsg()
     }
+    websocket.send(JSON.stringify(msg))
 
     setReady(!ready)
   }
@@ -83,6 +103,21 @@ function App() {
       case 'guessResponse':
         alert(message.payload.text)
         break;
+      case 'postGameLobby':
+        console.log(message)
+        setCurrPlayers(message.payload.currPlayers);
+        setRetryPlayers(message.payload.retryPlayers);
+        break;
+      case 'restart':
+        console.log(message)
+        setReadyPlayers(0)
+        setRetryPlayers(0)
+        setState('waiting')
+        setWinner('')
+        setReady(false)
+        setRetry(false)
+        break;
+        
       default:
         console.log("Unhandled message");
     }
@@ -95,7 +130,7 @@ function App() {
   useEffect(() => {
     if (wsRef.current) return;
 
-    const wsUri = `ws://${import.meta.env.VITE_APP_URL}?id=${id}`;
+    const wsUri = `ws://${import.meta.env.VITE_APP_URL}/ws?id=${id}`;
     const websocket = new WebSocket(wsUri);
 
     wsRef.current = websocket;
@@ -143,6 +178,10 @@ function App() {
     return <EndGamePage
       winner={winner}
       player={player}
+      retry={retry}
+      retryPlayers={retryPlayers}
+      currPlayers={currPlayers}
+      handleRetryClick={handleRetryClick}
     />
   }
 }

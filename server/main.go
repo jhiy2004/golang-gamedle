@@ -26,7 +26,7 @@ var upgrader = websocket.Upgrader{
 }
 
 type CreateRoomResponseDTO struct {
-	Id string
+	Id string `json:"id"`
 }
 
 func randomColor() string {
@@ -94,7 +94,24 @@ func handleConnection(room *game.Room, player *game.WSPlayer, mydb *sql.DB, rng 
 		}
 	}()
 
-	game.Gameplay(room, player, msgCh, mydb, rng, qtd)
+	for {
+		err := game.Gameplay(room, player, msgCh)
+		if err != nil {
+			return
+		}
+
+		if room.TryRestart() {
+			room.Reset()
+			room.Start(mydb, rng, qtd)
+
+			message, err := game.NewRestartMsg()
+			if err != nil {
+				log.Fatalln("Failed to create restart message")
+			}
+
+			room.Broadcast(nil, message)
+		}
+	}
 }
 
 func wsHandlerClosure(rooms map[string]*game.Room, mydb *sql.DB, rng *rand.Rand, qtd int) func(http.ResponseWriter, *http.Request) {
@@ -289,7 +306,7 @@ func startHostCallback() func() error {
 			}
 		}()
 
-		go game.Gameplay(room, hostPlayer, msgCh, mydb, rng, 5)
+		go game.Gameplay(room, hostPlayer, msgCh)
 
 		go func() {
 			//fmt.Println("Listening on port 8080")
@@ -327,6 +344,7 @@ func handleRoomCreateClosure(
 
 			rooms[id] = room
 
+			res.Header().Set("Access-Control-Allow-Origin", "*")
 			res.WriteHeader(http.StatusOK)
 
 			response := CreateRoomResponseDTO{
