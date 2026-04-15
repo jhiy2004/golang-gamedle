@@ -68,10 +68,11 @@ func randomColor() string {
 	return colors[i]
 }
 
-func handleConnection(room *game.Room, player *game.WSPlayer, mydb *sql.DB, rng *rand.Rand, qtd int) {
+func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.Rand, qtd int) {
+	player := room.GetPlayer(playerId).(*game.WSPlayer)
 	conn := player.Conn
 
-	defer room.Remove(player)
+	defer room.Remove(playerId)
 	defer conn.Close()
 
 	conn.SetCloseHandler(func(code int, text string) error {
@@ -124,8 +125,8 @@ func wsHandlerClosure(rooms map[string]*game.Room, mydb *sql.DB, rng *rand.Rand,
 			return
 		}
 
-		id := req.Form.Get("id")
-		room, ok := rooms[id]
+		roomId := req.Form.Get("roomId")
+		room, ok := rooms[roomId]
 		if !ok {
 			res.WriteHeader(http.StatusBadRequest)
 			return
@@ -137,20 +138,27 @@ func wsHandlerClosure(rooms map[string]*game.Room, mydb *sql.DB, rng *rand.Rand,
 			return
 		}
 
-		player := &game.WSPlayer{
-			Conn:  conn,
-			Name:  randomColor(),
-			Ready: false,
-			Mu:    &sync.Mutex{},
+		playerId := req.Form.Get("playerId")
+		var player game.Player
+		if !room.PlayerExists(playerId) {
+			player = &game.WSPlayer{
+				Conn:  conn,
+				Name:  randomColor(),
+				Ready: false,
+				Mu:    &sync.Mutex{},
+			}
+
+			playerId = game.GeneratePlayerUUID()
+			ok = room.Add(playerId, player)
+			if !ok {
+				conn.WriteMessage(websocket.TextMessage, []byte("The room is full, sorry!"))
+				conn.Close()
+			}
+		} else {
+			player = room.GetPlayer(playerId)
 		}
 
-		ok = room.Add(player)
-		if !ok {
-			conn.WriteMessage(websocket.TextMessage, []byte("The room is full, sorry!"))
-			conn.Close()
-		}
-
-		go handleConnection(room, player, mydb, rng, qtd)
+		go handleConnection(room, playerId, mydb, rng, qtd)
 	}
 }
 
@@ -245,7 +253,8 @@ func startHostCallback() func() error {
 			Channel: make(chan []byte),
 			Ready:   false,
 		}
-		room.Add(hostPlayer)
+		playerId := game.GeneratePlayerUUID()
+		room.Add(playerId, hostPlayer)
 
 		myModel := tui.InitModel(sendMessageClosure(hostPlayer), quitClosure())
 		p := tea.NewProgram(myModel)

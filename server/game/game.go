@@ -196,10 +196,8 @@ func GameQuestions(room *Room, player Player, msgCh chan *Message) error {
 	for questionCnt < qtdQuestions {
 		currQuestion := room.QuestionsOrder[questionCnt]
 		playersNames := make([]string, 0)
-		for p, active := range room.Players {
-			if active {
-				playersNames = append(playersNames, p.GetName())
-			}
+		for _, p := range room.Players {
+			playersNames = append(playersNames, p.GetName())
 		}
 
 		message, err := NewStateMsg(
@@ -307,10 +305,8 @@ func GameEnd(room *Room, player Player, msgCh chan *Message) error {
 	ok := room.EndGame(player)
 	if ok {
 		playersNames := make([]string, 0)
-		for p, active := range room.Players {
-			if active {
-				playersNames = append(playersNames, p.GetName())
-			}
+		for _, p := range room.Players {
+			playersNames = append(playersNames, p.GetName())
 		}
 		message, err := NewStateMsg(
 			"Game ended!!!",

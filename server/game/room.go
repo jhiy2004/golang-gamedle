@@ -38,7 +38,7 @@ type RoomConfig struct {
 
 type Room struct {
 	MinPlayers, MaxPlayers, CurrPlayers int
-	Players                             map[Player]bool
+	Players                             map[string]Player
 	Status                              RoomState
 	Mu                                  *sync.Mutex
 	Questions                           map[int]db.QuestionAnswersDTO
@@ -54,6 +54,10 @@ type Room struct {
 }
 
 func GenerateRoomUUID() string {
+	return uuid.NewString()
+}
+
+func GeneratePlayerUUID() string {
 	return uuid.NewString()
 }
 
@@ -99,11 +103,7 @@ func (r *Room) Reset() {
 	r.IsEnded = make(chan struct{})
 	r.Winner = &WSPlayer{}
 
-	for player, connected := range r.Players {
-		if !connected {
-			continue
-		}
-
+	for _, player := range r.Players {
 		player.Reset()
 	}
 }
@@ -173,7 +173,7 @@ func NewRoom(conf *RoomConfig) *Room {
 		MaxPlayers:     conf.MaxPlayers,
 		CurrPlayers:    0,
 		Status:         Waiting,
-		Players:        make(map[Player]bool),
+		Players:        make(map[string]Player),
 		Winner:         nil,
 		Questions:      make(map[int]db.QuestionAnswersDTO, conf.QuestionsCount),
 		QuestionsOrder: make([]int, 0, conf.QuestionsCount),
@@ -199,11 +199,6 @@ func (r *Room) GetStatus() RoomState {
 func (r *Room) PlayerRetry(player Player) bool {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
-
-	_, ok := r.Players[player]
-	if !ok {
-		log.Fatal("[ERROR] there should be an entry for all players")
-	}
 
 	if !player.IsRetry() {
 		player.ToggleRetry()
@@ -236,11 +231,6 @@ func (r *Room) PlayerCancelRetry(player Player) bool {
 func (r *Room) PlayerReady(player Player) bool {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
-
-	_, ok := r.Players[player]
-	if !ok {
-		log.Fatal("[ERROR] there should be an entry for all players")
-	}
 
 	if !player.IsReady() {
 		player.ToggleReady()
@@ -305,7 +295,22 @@ func (r *Room) SignalMinReached() {
 	r.MinReached.Broadcast()
 }
 
-func (r *Room) Add(player Player) bool {
+func (r *Room) PlayerExists(id string) bool {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	_, ok := r.Players[id]
+	return ok
+}
+
+func (r *Room) GetPlayer(id string) Player {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	return r.Players[id]
+}
+
+func (r *Room) Add(id string, player Player) bool {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 
@@ -313,7 +318,8 @@ func (r *Room) Add(player Player) bool {
 		return false
 	}
 
-	r.Players[player] = true
+	log.Printf("Added player with id: %s\n", id)
+	r.Players[id] = player
 	r.CurrPlayers++
 	r.SignalMinReached()
 
@@ -325,11 +331,12 @@ func (r *Room) Add(player Player) bool {
 	return true
 }
 
-func (r *Room) Remove(player Player) bool {
+func (r *Room) Remove(id string) bool {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 
-	r.Players[player] = false
+	delete(r.Players, id)
+
 	r.CurrPlayers--
 	r.SignalMinReached()
 
@@ -340,16 +347,14 @@ func (r *Room) Broadcast(player Player, message *Message) {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 
-	for p, ok := range r.Players {
+	for _, p := range r.Players {
 		if p == player {
 			continue
 		}
 
-		if ok {
-			err := p.Send(message)
-			if err != nil {
-				fmt.Println(err)
-			}
+		err := p.Send(message)
+		if err != nil {
+			fmt.Println(err)
 		}
 	}
 }

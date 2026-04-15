@@ -130,7 +130,7 @@ function App() {
   useEffect(() => {
     if (wsRef.current) return;
 
-    const wsUri = `ws://${import.meta.env.VITE_APP_URL}/ws?id=${id}`;
+    const wsUri = `ws://${import.meta.env.VITE_APP_URL}/ws?roomId=${id}`;
     const websocket = new WebSocket(wsUri);
 
     wsRef.current = websocket;
