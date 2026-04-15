@@ -1,14 +1,19 @@
 package game
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/jhiy2004/golang-gamedle/server/db"
 	"log"
+	"math/rand"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jhiy2004/golang-gamedle/server/db"
 )
 
 type RoomState int
@@ -42,6 +47,75 @@ type Room struct {
 
 	MinReached *sync.Cond
 	Ready      chan struct{}
+	IsEnded    chan struct{}
+}
+
+func GenerateRoomUUID() string {
+	return uuid.NewString()
+}
+
+func (r *Room) EndGame(player Player) bool {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	if r.Status == End {
+		return false
+	}
+
+	r.Winner = player
+	r.Status = End
+
+	// Reset variaveis para logica de ready
+	r.ReadyPlayers = 0
+	r.Ready = make(chan struct{})
+	close(r.IsEnded)
+
+	return true
+}
+
+func (r *Room) Reset() {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	r.Questions = make(map[int]db.QuestionAnswersDTO)
+	r.QuestionsOrder = make([]int, 0)
+
+	r.Status = Waiting
+	r.ReadyPlayers = 0
+	r.Ready = make(chan struct{})
+	r.IsEnded = make(chan struct{})
+	r.Winner = &WSPlayer{}
+}
+
+func (r *Room) Start(mydb *sql.DB, rng *rand.Rand, qtd int) error {
+	ids, err := db.GetQuestionsIds(mydb)
+
+	if qtd > len(ids) {
+		return errors.New("qtd is greater than quantity of avaiable questions")
+	}
+
+	if err != nil {
+		return err
+	}
+
+	perm := rng.Perm(len(ids))
+	choices := perm[:qtd]
+
+	for i, c := range choices {
+		choices[i] = ids[c]
+	}
+
+	res, err := db.GetQuestions(mydb, choices)
+	if err != nil {
+		return err
+	}
+
+	for _, q := range res {
+		r.Questions[q.Id] = q
+	}
+	r.QuestionsOrder = append(r.QuestionsOrder, choices...)
+
+	return nil
 }
 
 func StringToRoomState(state string) RoomState {
@@ -85,6 +159,7 @@ func NewRoom(conf *RoomConfig) *Room {
 		ReadyPlayers:   0,
 		MinReached:     sync.NewCond(mutex),
 		Ready:          make(chan struct{}),
+		IsEnded:        make(chan struct{}),
 		Mu:             mutex,
 	}
 
@@ -132,6 +207,10 @@ func (r *Room) PlayerCancel(player Player) bool {
 	return false
 }
 
+func (r *Room) WaitIsEnded() <-chan struct{} {
+	return r.IsEnded
+}
+
 func (r *Room) WaitReady() <-chan struct{} {
 	return r.Ready
 }
@@ -166,7 +245,7 @@ func (r *Room) Add(player Player) bool {
 	r.SignalMinReached()
 
 	if r.CurrPlayers == r.MaxPlayers {
-		fmt.Println("Why?", r.CurrPlayers, r.MaxPlayers)
+		log.Println("Curr players equals Max players")
 		r.SignalReady()
 	}
 

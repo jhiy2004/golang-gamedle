@@ -3,8 +3,11 @@ import EndGamePage from "./pages/EndGamePage/EndGamePage"
 import GamePage from "./pages/GamePage/GamePage"
 import LobbyPage from "./pages/LobbyPage/LobbyPage"
 import { createCancelMsg, createGuessMsg, createReadyMsg, type Message } from "./game/message";
+import { useParams } from "react-router-dom";
 
 function App() {
+  const { id } = useParams()
+
   const wsRef = useRef<WebSocket | null>(null);
   const [ready, setReady] = useState(false)
 
@@ -92,7 +95,7 @@ function App() {
   useEffect(() => {
     if (wsRef.current) return;
 
-    const wsUri = `ws://${import.meta.env.VITE_APP_URL}`;
+    const wsUri = `ws://${import.meta.env.VITE_APP_URL}?id=${id}`;
     const websocket = new WebSocket(wsUri);
 
     wsRef.current = websocket;
@@ -115,7 +118,7 @@ function App() {
       websocket.close();
       wsRef.current = null;
     };
-  }, []);
+  }, [id]);
 
   if (state === 'waiting' || state === '') {
     return <LobbyPage

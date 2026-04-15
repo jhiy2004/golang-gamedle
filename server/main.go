@@ -25,6 +25,10 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type CreateRoomResponseDTO struct {
+	Id string
+}
+
 func randomColor() string {
 	colors := []string{
 		"red",
@@ -64,7 +68,7 @@ func randomColor() string {
 	return colors[i]
 }
 
-func handleConnection(room *game.Room, player *game.WSPlayer) {
+func handleConnection(room *game.Room, player *game.WSPlayer, mydb *sql.DB, rng *rand.Rand, qtd int) {
 	conn := player.Conn
 
 	defer room.Remove(player)
@@ -90,11 +94,26 @@ func handleConnection(room *game.Room, player *game.WSPlayer) {
 		}
 	}()
 
-	game.Gameplay(room, player, msgCh)
+	game.Gameplay(room, player, msgCh, mydb, rng, qtd)
 }
 
-func wsHandlerClosure(room *game.Room) func(http.ResponseWriter, *http.Request) {
+func wsHandlerClosure(rooms map[string]*game.Room, mydb *sql.DB, rng *rand.Rand, qtd int) func(http.ResponseWriter, *http.Request) {
 	return func(res http.ResponseWriter, req *http.Request) {
+		log.Println("Request at /ws")
+
+		err := req.ParseForm()
+		if err != nil {
+			res.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		id := req.Form.Get("id")
+		room, ok := rooms[id]
+		if !ok {
+			res.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		conn, err := upgrader.Upgrade(res, req, nil)
 		if err != nil {
 			log.Println("Error upgrading: ", err)
@@ -108,13 +127,13 @@ func wsHandlerClosure(room *game.Room) func(http.ResponseWriter, *http.Request) 
 			Mu:    &sync.Mutex{},
 		}
 
-		ok := room.Add(player)
+		ok = room.Add(player)
 		if !ok {
 			conn.WriteMessage(websocket.TextMessage, []byte("The room is full, sorry!"))
 			conn.Close()
 		}
 
-		go handleConnection(room, player)
+		go handleConnection(room, player, mydb, rng, qtd)
 	}
 }
 
@@ -125,8 +144,13 @@ func exitCallback() func() error {
 	}
 }
 
-func seedCallback(mydb *sql.DB) func() error {
+func seedCallback() func() error {
 	return func() error {
+		mydb, err := db.InitDB()
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		return db.Seed(mydb)
 	}
 }
@@ -143,16 +167,61 @@ func quitClosure() func() error {
 	}
 }
 
-func startServerCallback(room *game.Room, mydb *sql.DB, rng *rand.Rand, config *game.RoomConfig) func() error {
+func startServerCallback() func() error {
 	return func() error {
-		err := game.GameStart(room, mydb, rng, config.QuestionsCount)
+		mydb, err := db.InitDB()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		rooms := make(map[string]*game.Room)
+
+		config := game.ReadConfig()
+		seed := rand.NewSource(42)
+		rng := rand.New(seed)
+
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		log.Println("Server start")
 
-		http.HandleFunc("/ws", wsHandlerClosure(room))
+		http.HandleFunc("/create", handleRoomCreateClosure(rooms, config, mydb, rng, 5))
+		http.HandleFunc("/ws", wsHandlerClosure(rooms, mydb, rng, 5))
+
+		fmt.Println("Server listening at port 8080")
+		fmt.Println("Routes")
+		fmt.Println("/create")
+		fmt.Println("/ws")
+		return http.ListenAndServe(":8080", nil)
+	}
+}
+
+func startHostCallback() func() error {
+	return func() error {
+		mydb, err := db.InitDB()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		rooms := make(map[string]*game.Room)
+		id := game.GenerateRoomUUID()
+
+		config := game.ReadConfig()
+		rooms[id] = game.NewRoom(config)
+		room := rooms[id]
+
+		seed := rand.NewSource(42)
+		rng := rand.New(seed)
+
+		room.Start(mydb, rng, 5)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Println("Server start")
+
+		http.HandleFunc("/ws", wsHandlerClosure(rooms, mydb, rng, 5))
 
 		hostPlayer := &game.HostPlayer{
 			Name:    "Host",
@@ -220,7 +289,7 @@ func startServerCallback(room *game.Room, mydb *sql.DB, rng *rand.Rand, config *
 			}
 		}()
 
-		go game.Gameplay(room, hostPlayer, msgCh)
+		go game.Gameplay(room, hostPlayer, msgCh, mydb, rng, 5)
 
 		go func() {
 			//fmt.Println("Listening on port 8080")
@@ -236,6 +305,48 @@ func startServerCallback(room *game.Room, mydb *sql.DB, rng *rand.Rand, config *
 	}
 }
 
+func handleRoomCreateClosure(
+	rooms map[string]*game.Room,
+	config *game.RoomConfig,
+	mydb *sql.DB,
+	rng *rand.Rand,
+	qtd int,
+) func(http.ResponseWriter, *http.Request) {
+	return func(res http.ResponseWriter, req *http.Request) {
+		if req.Method == http.MethodPost {
+			// maximo de rooms de uma vez
+			if len(rooms) > 5 {
+				res.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			id := game.GenerateRoomUUID()
+
+			room := game.NewRoom(config)
+			room.Start(mydb, rng, qtd)
+
+			rooms[id] = room
+
+			res.WriteHeader(http.StatusOK)
+
+			response := CreateRoomResponseDTO{
+				Id: id,
+			}
+
+			err := json.NewEncoder(res).Encode(&response)
+			if err != nil {
+				log.Println("Failed to encode create room response")
+			}
+
+			log.Printf("Room created with id: %s\n", id)
+
+			return
+		}
+
+		res.WriteHeader(http.StatusNotFound)
+	}
+}
+
 func main() {
 	logFile, err := os.OpenFile("app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
@@ -245,20 +356,9 @@ func main() {
 
 	log.SetOutput(logFile)
 
-	mydb, err := db.InitDB()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	config := game.ReadConfig()
-	room := game.NewRoom(config)
-
-	seed := rand.NewSource(42)
-	rng := rand.New(seed)
-
-	seedCallbackFn := seedCallback(mydb)
-	startServerCallbackFn := startServerCallback(room, mydb, rng, config)
-
+	seedCallbackFn := seedCallback()
+	startHostCallbackFn := startHostCallback()
+	startServerCallbackFn := startServerCallback()
 	exitCallbackFn := exitCallback()
 
 	cmds := map[string]struct {
@@ -268,6 +368,10 @@ func main() {
 		"seed": {
 			Name:     "seed",
 			Callback: seedCallbackFn,
+		},
+		"host": {
+			Name:     "host",
+			Callback: startHostCallbackFn,
 		},
 		"server": {
 			Name:     "server",
