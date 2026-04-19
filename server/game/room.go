@@ -73,6 +73,17 @@ func (r *Room) TryRestart() bool {
 	return true
 }
 
+func (r *Room) PlayingGame() {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	if r.Status == Playing {
+		return
+	}
+
+	r.Status = Playing
+}
+
 func (r *Room) EndGame(player Player) bool {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
@@ -318,7 +329,6 @@ func (r *Room) Add(id string, player Player) bool {
 		return false
 	}
 
-	log.Printf("Added player with id: %s\n", id)
 	r.Players[id] = player
 	r.CurrPlayers++
 	r.SignalMinReached()
@@ -335,11 +345,20 @@ func (r *Room) Remove(id string) bool {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 
+	if r.Status == Playing {
+		player := r.Players[id]
+		wsPlayer, ok := player.(Connectable)
+		if ok {
+			wsPlayer.Disconnect()
+		}
+
+		return true
+	}
+
 	delete(r.Players, id)
 
 	r.CurrPlayers--
 	r.SignalMinReached()
-
 	return true
 }
 
@@ -369,7 +388,7 @@ func (r *Room) ValidateAnswer(questionId int, answer string) bool {
 	}
 
 	for _, ans := range question.Answers {
-		if strings.ToUpper(ans) == strings.ToUpper(answer) {
+		if strings.EqualFold(ans, answer) {
 			return true
 		}
 	}
@@ -386,8 +405,6 @@ func ReadConfig() *RoomConfig {
 	}
 
 	file, err := os.Open(configFilename)
-	defer file.Close()
-
 	if err != nil {
 		content, err := json.Marshal(&defaultConfig)
 		if err != nil {
@@ -402,6 +419,7 @@ func ReadConfig() *RoomConfig {
 
 		return &defaultConfig
 	}
+	defer file.Close()
 
 	conf := RoomConfig{}
 	dec := json.NewDecoder(file)

@@ -3,10 +3,11 @@ import EndGamePage from "./pages/EndGamePage/EndGamePage"
 import GamePage from "./pages/GamePage/GamePage"
 import LobbyPage from "./pages/LobbyPage/LobbyPage"
 import { createCancelMsg, createCancelRetryMsg, createGuessMsg, createReadyMsg, createRetryMsg, type Message } from "./game/message";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 function App() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams();
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -84,6 +85,7 @@ function App() {
         setMinPlayers(message.payload.minPlayers);
         setMaxPlayers(message.payload.maxPlayers);
         setPlayer(message.payload.playerName);
+        console.log(message.payload.playerId);
         break;
       case 'notify':
         console.log(message.payload.text);
@@ -130,7 +132,10 @@ function App() {
   useEffect(() => {
     if (wsRef.current) return;
 
-    const wsUri = `ws://${import.meta.env.VITE_APP_URL}/ws?roomId=${id}`;
+    const playerId = searchParams.get("playerId")
+    console.log("Received query param: " + playerId)
+
+    const wsUri = `ws://${import.meta.env.VITE_APP_URL}/ws?roomId=${id}` + (playerId === null ? "" : `&playerId=${playerId}`);
     const websocket = new WebSocket(wsUri);
 
     wsRef.current = websocket;
@@ -153,7 +158,7 @@ function App() {
       websocket.close();
       wsRef.current = null;
     };
-  }, [id]);
+  }, [searchParams, id]);
 
   if (state === 'waiting' || state === '') {
     return <LobbyPage

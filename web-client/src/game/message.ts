@@ -60,6 +60,7 @@ export type StartMsg = {
         minPlayers: number;
         maxPlayers: number;
         playerName: string;
+        playerId: string;
     }
 }
 
@@ -158,13 +159,14 @@ export function createGuessMsg(answer: string): GuessMsg {
     return guessMsg
 }
 
-export function createStartMsg(minPlayers: number, maxPlayers: number, playerName: string): StartMsg {
+export function createStartMsg(minPlayers: number, maxPlayers: number, playerName: string, playerId: string): StartMsg {
     const startMsg: StartMsg = {
         cmd: 'start',
         payload: {
             minPlayers,
             maxPlayers,
             playerName,
+            playerId,
         }
     } 
     

@@ -43,6 +43,7 @@ type StartMsg struct {
 	MinPlayers int    `json:"minPlayers"`
 	MaxPlayers int    `json:"maxPlayers"`
 	PlayerName string `json:"playerName"`
+	PlayerId   string `json:"playerId"`
 }
 
 type PostGameLobbyMsg struct {
@@ -184,11 +185,12 @@ func NewLobbyMsg(currPlayers, readyPlayers int) (*Message, error) {
 	return &base, nil
 }
 
-func NewStartMsg(minPlayers, maxPlayers int, playerName string) (*Message, error) {
+func NewStartMsg(minPlayers, maxPlayers int, playerName, playerId string) (*Message, error) {
 	msg := StartMsg{
 		MinPlayers: minPlayers,
 		MaxPlayers: maxPlayers,
 		PlayerName: playerName,
+		PlayerId:   playerId,
 	}
 
 	content, err := json.Marshal(&msg)

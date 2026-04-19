@@ -1,4 +1,3 @@
-import { useState } from "react"
 import RoomSpan from "../RoomSpan/RoomSpan"
 import styles from "./LobbyHeader.module.css"
 import type { LobbyHeaderProps } from "./types";

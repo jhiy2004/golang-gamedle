@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"slices"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
@@ -29,7 +30,7 @@ type CreateRoomResponseDTO struct {
 	Id string `json:"id"`
 }
 
-func randomColor() string {
+func randomColor(used []string) string {
 	colors := []string{
 		"red",
 		"blue",
@@ -63,25 +64,36 @@ func randomColor() string {
 		"tan",
 	}
 
-	i := rand.Intn(len(colors))
+	avaiable := slices.DeleteFunc(colors, func(c string) bool {
+		return slices.Contains(used, c)
+	})
+
+	if len(avaiable) == 0 {
+		return ""
+	}
+
+	i := rand.Intn(len(avaiable))
 
 	return colors[i]
 }
 
 func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.Rand, qtd int) {
-	player := room.GetPlayer(playerId).(*game.WSPlayer)
-	conn := player.Conn
+	player := room.GetPlayer(playerId)
 
+	wsPlayer, ok := player.(*game.WSPlayer)
+	if ok {
+		conn := wsPlayer.GetConnection()
+		defer conn.Close()
+
+		conn.SetCloseHandler(func(code int, text string) error {
+			log.Printf("Oh shit: %d %s\n", code, text)
+			return nil
+		})
+	}
 	defer room.Remove(playerId)
-	defer conn.Close()
 
-	conn.SetCloseHandler(func(code int, text string) error {
-		log.Printf("Oh shit: %d %s\n", code, text)
-		return nil
-	})
-
+	wsPlayer.StartWriter()
 	msgCh := make(chan *game.Message)
-
 	go func() {
 		for {
 			message, err := player.Receive()
@@ -96,9 +108,10 @@ func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.
 	}()
 
 	for {
-		err := game.Gameplay(room, player, msgCh)
+		err := game.Gameplay(room, playerId, msgCh)
 		if err != nil {
-			return
+			log.Println(err)
+			break
 		}
 
 		if room.TryRestart() {
@@ -113,6 +126,7 @@ func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.
 			room.Broadcast(nil, message)
 		}
 	}
+	log.Println("Killing a handle connection goroutine")
 }
 
 func wsHandlerClosure(rooms map[string]*game.Room, mydb *sql.DB, rng *rand.Rand, qtd int) func(http.ResponseWriter, *http.Request) {
@@ -139,23 +153,45 @@ func wsHandlerClosure(rooms map[string]*game.Room, mydb *sql.DB, rng *rand.Rand,
 		}
 
 		playerId := req.Form.Get("playerId")
+		log.Printf("playerId: %s\n", playerId)
+
 		var player game.Player
 		if !room.PlayerExists(playerId) {
+			if room.GetStatus() != game.Waiting {
+				log.Println("The room isn't at lobby")
+				return
+			}
+
+			used := make([]string, 0)
+			for _, p := range room.Players {
+				used = append(used, p.GetName())
+			}
+
 			player = &game.WSPlayer{
-				Conn:  conn,
-				Name:  randomColor(),
+				Name:  randomColor(used),
 				Ready: false,
 				Mu:    &sync.Mutex{},
 			}
 
+			player.(*game.WSPlayer).Connect(conn)
+
 			playerId = game.GeneratePlayerUUID()
 			ok = room.Add(playerId, player)
 			if !ok {
+				log.Println("The room is full")
 				conn.WriteMessage(websocket.TextMessage, []byte("The room is full, sorry!"))
 				conn.Close()
 			}
+			log.Printf("Created player with id %s\n", playerId)
 		} else {
+			log.Printf("Player %s returned to the game\n", playerId)
 			player = room.GetPlayer(playerId)
+
+			wsPlayer, ok := player.(game.Connectable)
+			if ok {
+				log.Println("Player is WsPlayer")
+				wsPlayer.Connect(conn)
+			}
 		}
 
 		go handleConnection(room, playerId, mydb, rng, qtd)
@@ -205,10 +241,6 @@ func startServerCallback() func() error {
 		seed := rand.NewSource(42)
 		rng := rand.New(seed)
 
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		log.Println("Server start")
 
 		http.HandleFunc("/create", handleRoomCreateClosure(rooms, config, mydb, rng, 5))
@@ -240,9 +272,6 @@ func startHostCallback() func() error {
 		rng := rand.New(seed)
 
 		room.Start(mydb, rng, 5)
-		if err != nil {
-			log.Fatal(err)
-		}
 
 		log.Println("Server start")
 
@@ -315,7 +344,7 @@ func startHostCallback() func() error {
 			}
 		}()
 
-		go game.Gameplay(room, hostPlayer, msgCh)
+		go game.Gameplay(room, playerId, msgCh)
 
 		go func() {
 			//fmt.Println("Listening on port 8080")
@@ -339,6 +368,7 @@ func handleRoomCreateClosure(
 	qtd int,
 ) func(http.ResponseWriter, *http.Request) {
 	return func(res http.ResponseWriter, req *http.Request) {
+		log.Println("Request at /create")
 		if req.Method == http.MethodPost {
 			// maximo de rooms de uma vez
 			if len(rooms) > 5 {
@@ -375,6 +405,8 @@ func handleRoomCreateClosure(
 }
 
 func main() {
+	fmt.Println("Starting")
+
 	logFile, err := os.OpenFile("app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Fatal(err)

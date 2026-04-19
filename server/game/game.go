@@ -7,8 +7,78 @@ import (
 	"log"
 )
 
+func handlePlayerGuess(room *Room, player Player, msg *Message) {
+	state := player.GetState()
+	currQuestion := room.QuestionsOrder[state.Question]
+
+	switch msg.Cmd {
+	case "guess":
+		log.Println("Guess...")
+		guessMsg := GuessMsg{}
+		err := json.Unmarshal(msg.Payload, &guessMsg)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if room.ValidateAnswer(currQuestion, guessMsg.Answer) {
+			// TODO: Remove the notification logic
+			message, err := NewNotifyMsg("You're right!")
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = player.Send(message)
+
+			message, err = NewGuessResponseMsg(true, "You're right")
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// TODO: Remove the notification logic
+			message, err = NewNotifyMsg(fmt.Sprintf("User %s passed the %d question", player.GetName(), state.Question+1))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			room.Broadcast(
+				player,
+				message,
+			)
+
+			message, err = NewPlayerStatusMsg(player.GetName(), state.Question+1)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			room.Broadcast(
+				nil,
+				message,
+			)
+
+			state.Question++
+		} else {
+			// TODO: Remove the notification logic
+			message, err := NewNotifyMsg("You're wrong haha!")
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			message, err = NewGuessResponseMsg(false, "You're wrong haha!")
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			err = player.Send(message)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+		}
+	}
+}
+
 func handlePlayerRetry(room *Room, player Player, msg *Message) {
-	if msg.Cmd == "retry" {
+	switch msg.Cmd {
+	case "retry":
 		log.Println("Retry Message")
 		changed := room.PlayerRetry(player)
 
@@ -25,7 +95,7 @@ func handlePlayerRetry(room *Room, player Player, msg *Message) {
 			log.Fatal(err)
 		}
 		room.Broadcast(player, message)
-	} else if msg.Cmd == "cancelRetry" {
+	case "cancelRetry":
 		log.Println("Cancel Retry message")
 
 		changed := room.PlayerCancelRetry(player)
@@ -59,7 +129,8 @@ func handlePlayerRetry(room *Room, player Player, msg *Message) {
 }
 
 func handlePlayerReady(room *Room, player Player, msg *Message) {
-	if msg.Cmd == "ready" {
+	switch msg.Cmd {
+	case "ready":
 		log.Println("Ready message")
 		changed := room.PlayerReady(player)
 
@@ -76,7 +147,7 @@ func handlePlayerReady(room *Room, player Player, msg *Message) {
 			log.Fatal(err)
 		}
 		room.Broadcast(player, message)
-	} else if msg.Cmd == "cancel" {
+	case "cancel":
 		log.Println("Cancel message")
 
 		changed := room.PlayerCancel(player)
@@ -109,18 +180,18 @@ func handlePlayerReady(room *Room, player Player, msg *Message) {
 	room.Broadcast(nil, message)
 }
 
-func Gameplay(room *Room, player Player, msgCh chan *Message) error {
-	err := GameLobby(room, player, msgCh)
+func Gameplay(room *Room, playerId string, msgCh chan *Message) error {
+	err := GameLobby(room, playerId, msgCh)
 	if err != nil {
 		return err
 	}
 
-	err = GameQuestions(room, player, msgCh)
+	err = GameQuestions(room, playerId, msgCh)
 	if err != nil {
 		return err
 	}
 
-	err = GameEnd(room, player, msgCh)
+	err = GameEnd(room, playerId, msgCh)
 	if err != nil {
 		return err
 	}
@@ -128,18 +199,24 @@ func Gameplay(room *Room, player Player, msgCh chan *Message) error {
 	return nil
 }
 
-func GameLobby(room *Room, player Player, msgCh chan *Message) error {
+func GameLobby(room *Room, playerId string, msgCh chan *Message) error {
+	if room.GetStatus() != Waiting {
+		return nil
+	}
+
 	log.Println("Game Lobby")
 
-	message, err := NewStartMsg(room.MinPlayers, room.MaxPlayers, player.GetName())
+	player := room.GetPlayer(playerId)
+
+	message, err := NewStartMsg(room.MinPlayers, room.MaxPlayers, player.GetName(), playerId)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	err = player.Send(message)
 	if err != nil {
 		log.Println(err)
 	}
-	player.Send(message)
 
 	message, err = NewLobbyMsg(room.CurrPlayers, room.ReadyPlayers)
 	if err != nil {
@@ -156,10 +233,7 @@ func GameLobby(room *Room, player Player, msgCh chan *Message) error {
 
 		select {
 		case <-room.WaitReady():
-
-			room.Mu.Lock()
-			room.Status = Playing
-			room.Mu.Unlock()
+			room.PlayingGame()
 
 			message, err := NewNotifyMsg("Game is about to start")
 			if err != nil {
@@ -177,24 +251,27 @@ func GameLobby(room *Room, player Player, msgCh chan *Message) error {
 	}
 }
 
-func GameQuestions(room *Room, player Player, msgCh chan *Message) error {
+func GameQuestions(room *Room, playerId string, msgCh chan *Message) error {
+	if room.Status != Playing {
+		return nil
+	}
+
 	log.Println("Game Questions")
 
-	questionCnt := 0
+	player := room.GetPlayer(playerId)
+
+	state := player.GetState()
 	qtdQuestions := len(room.QuestionsOrder)
 
-	message, err := NewPlayerStatusMsg(player.GetName(), questionCnt)
+	message, err := NewPlayerStatusMsg(player.GetName(), state.Question)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err != nil {
-		log.Fatal(err)
-	}
 	room.Broadcast(nil, message)
 
-	for questionCnt < qtdQuestions {
-		currQuestion := room.QuestionsOrder[questionCnt]
+	for state.Question < qtdQuestions {
+		currQuestion := room.QuestionsOrder[state.Question]
 		playersNames := make([]string, 0)
 		for _, p := range room.Players {
 			playersNames = append(playersNames, p.GetName())
@@ -223,84 +300,17 @@ func GameQuestions(room *Room, player Player, msgCh chan *Message) error {
 				return errors.New("Error at gameplay")
 			}
 
-			if msg.Cmd == "guess" {
-				log.Println("Guess...")
-				guessMsg := GuessMsg{}
-				err = json.Unmarshal(msg.Payload, &guessMsg)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				if room.ValidateAnswer(currQuestion, guessMsg.Answer) {
-					// TODO: Remove the notification logic
-					message, err := NewNotifyMsg("You're right!")
-					if err != nil {
-						log.Fatal(err)
-					}
-					err = player.Send(message)
-
-					message, err = NewGuessResponseMsg(true, "You're right")
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					// TODO: Remove the notification logic
-					message, err = NewNotifyMsg(fmt.Sprintf("User %s passed the %d question", player.GetName(), questionCnt+1))
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					room.Broadcast(
-						player,
-						message,
-					)
-
-					message, err = NewPlayerStatusMsg(player.GetName(), questionCnt+1)
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					room.Broadcast(
-						nil,
-						message,
-					)
-
-					questionCnt++
-				} else {
-					// TODO: Remove the notification logic
-					message, err := NewNotifyMsg("You're wrong haha!")
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					message, err = NewGuessResponseMsg(false, "You're wrong haha!")
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					err = player.Send(message)
-					if err != nil {
-						log.Fatal(err)
-					}
-
-				}
-			}
+			handlePlayerGuess(room, player, msg)
 		}
 	}
 
 	return nil
 }
 
-func GameEnd(room *Room, player Player, msgCh chan *Message) error {
+func GameEnd(room *Room, playerId string, msgCh chan *Message) error {
 	log.Println("Game End")
+
+	player := room.GetPlayer(playerId)
 
 	ok := room.EndGame(player)
 	if ok {
@@ -314,12 +324,7 @@ func GameEnd(room *Room, player Player, msgCh chan *Message) error {
 			RoomStateToString(End),
 			playersNames,
 		)
-		err = player.Send(message)
-		if err != nil {
-			log.Println("[ERROR] Failed to receive end game state")
-			return err
-		}
-		room.Broadcast(player, message)
+		room.Broadcast(nil, message)
 
 		message, err = NewNotifyMsg("You've won the game")
 		if err != nil {
@@ -336,8 +341,13 @@ func GameEnd(room *Room, player Player, msgCh chan *Message) error {
 		if err != nil {
 			return err
 		}
-
 		room.Broadcast(player, message)
+
+		message, err = NewPostGameLobbyMsg(room.CurrPlayers, room.RetryPlayers)
+		if err != nil {
+			log.Fatal(err)
+		}
+		room.Broadcast(nil, message)
 	}
 
 	// Retry
