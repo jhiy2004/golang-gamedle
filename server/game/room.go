@@ -40,14 +40,14 @@ type Room struct {
 	MinPlayers, MaxPlayers, CurrPlayers int
 	Players                             map[string]Player
 	Status                              RoomState
-	Mu                                  *sync.Mutex
+	Mu                                  sync.Mutex
 	Questions                           map[int]db.QuestionAnswersDTO
 	QuestionsOrder                      []int
 	ReadyPlayers                        int
 	RetryPlayers                        int
 	Winner                              Player
 
-	MinReached *sync.Cond
+	MinReached sync.Cond
 	Ready      chan struct{}
 	IsEnded    chan struct{}
 	Retry      chan struct{}
@@ -59,6 +59,20 @@ func GenerateRoomUUID() string {
 
 func GeneratePlayerUUID() string {
 	return uuid.NewString()
+}
+
+func (r *Room) Full() bool {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	return r.CurrPlayers >= r.MaxPlayers
+}
+
+func (r *Room) Empty() bool {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+
+	return r.CurrPlayers <= 0
 }
 
 func (r *Room) TryRestart() bool {
@@ -95,6 +109,13 @@ func (r *Room) EndGame(player Player) bool {
 	r.Winner = player
 	r.Status = End
 	r.SignalIsEnded()
+
+	for id, p := range r.Players {
+		if !p.GetState().Connected {
+			delete(r.Players, id)
+			r.CurrPlayers--
+		}
+	}
 
 	return true
 }
@@ -177,8 +198,6 @@ func RoomStateToString(state RoomState) string {
 }
 
 func NewRoom(conf *RoomConfig) *Room {
-	mutex := &sync.Mutex{}
-
 	room := Room{
 		MinPlayers:     conf.MinPlayers,
 		MaxPlayers:     conf.MaxPlayers,
@@ -190,12 +209,11 @@ func NewRoom(conf *RoomConfig) *Room {
 		QuestionsOrder: make([]int, 0, conf.QuestionsCount),
 		ReadyPlayers:   0,
 		RetryPlayers:   0,
-		MinReached:     sync.NewCond(mutex),
 		Ready:          make(chan struct{}),
 		Retry:          make(chan struct{}),
 		IsEnded:        make(chan struct{}),
-		Mu:             mutex,
 	}
+	room.MinReached = *sync.NewCond(&room.Mu)
 
 	return &room
 }
@@ -295,13 +313,14 @@ func (r *Room) SignalRetry() {
 }
 
 func (r *Room) WaitMinReached() {
-	r.MinReached.L.Lock()
-	defer r.MinReached.L.Unlock()
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
 
 	for r.CurrPlayers < r.MinPlayers {
 		r.MinReached.Wait()
 	}
 }
+
 func (r *Room) SignalMinReached() {
 	r.MinReached.Broadcast()
 }
@@ -366,16 +385,27 @@ func (r *Room) Broadcast(player Player, message *Message) {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 
+	if player == nil {
+		log.Println("Start broadcast")
+	} else {
+		log.Printf("Start broadcast by %s\n", player.GetName())
+	}
+
 	for _, p := range r.Players {
 		if p == player {
 			continue
 		}
 
-		err := p.Send(message)
-		if err != nil {
-			fmt.Println(err)
+		if p.GetState().Connected {
+			log.Printf("Start Sent message to %s\n", p.GetName())
+			err := p.Send(message)
+			if err != nil {
+				fmt.Println(err)
+			}
+			log.Printf("Finish Sent message to %s\n", p.GetName())
 		}
 	}
+	log.Println("End broadcast")
 }
 
 func (r *Room) ValidateAnswer(questionId int, answer string) bool {

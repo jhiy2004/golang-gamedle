@@ -7,7 +7,7 @@
 }
 
 .mainCard {
-    width: 320px;
+    min-width: 320px;
     border-radius: 16px;
     overflow: hidden;
 

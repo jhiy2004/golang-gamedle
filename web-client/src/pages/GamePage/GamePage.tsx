@@ -14,7 +14,7 @@ function GamePage({ question, answer, setAnswer, handleAnswerSend, players, play
         <div style={{ padding: "10px" }}>
           <div>
             <h1>Question</h1>
-            <p>{question}</p>
+            <p style={{maxWidth: "320px"}}>{question}</p>
           </div>
           <div>
             <div>

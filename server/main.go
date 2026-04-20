@@ -26,6 +26,14 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type RoomResponseDTO struct {
+	Id string `json:"id"`
+}
+
+type ListRoomsResponseDTO struct {
+	Rooms []RoomResponseDTO `json:"rooms"`
+}
+
 type CreateRoomResponseDTO struct {
 	Id string `json:"id"`
 }
@@ -77,7 +85,10 @@ func randomColor(used []string) string {
 	return colors[i]
 }
 
-func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.Rand, qtd int) {
+func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.Rand, qtd int, killRoom func()) {
+	log.Println("Handle new connection")
+	defer killRoom()
+
 	player := room.GetPlayer(playerId)
 
 	wsPlayer, ok := player.(*game.WSPlayer)
@@ -92,7 +103,6 @@ func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.
 	}
 	defer room.Remove(playerId)
 
-	wsPlayer.StartWriter()
 	msgCh := make(chan *game.Message)
 	go func() {
 		for {
@@ -106,7 +116,6 @@ func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.
 			msgCh <- message
 		}
 	}()
-
 	for {
 		err := game.Gameplay(room, playerId, msgCh)
 		if err != nil {
@@ -129,31 +138,66 @@ func handleConnection(room *game.Room, playerId string, mydb *sql.DB, rng *rand.
 	log.Println("Killing a handle connection goroutine")
 }
 
+func handleCheckCanConnectClosure(rooms map[string]*game.Room) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Request at /validate")
+
+		if r.Method == http.MethodGet {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+
+			roomId := r.URL.Query().Get("roomId")
+			room, ok := rooms[roomId]
+			if !ok {
+				http.Error(w, "This room doesn't exists", http.StatusNotFound)
+				return
+			}
+
+			playerId := r.URL.Query().Get("playerId")
+
+			if !room.PlayerExists(playerId) {
+				if room.Full() {
+					http.Error(w, "The room is full", http.StatusConflict)
+					return
+				}
+
+				if room.GetStatus() != game.Waiting {
+					log.Println("The room isn't at lobby")
+					http.Error(w, "The room isn't at lobby", http.StatusConflict)
+					return
+				}
+			} else {
+				player := room.GetPlayer(playerId)
+				if player.GetState().Connected {
+					http.Error(w, "The player is already connected", http.StatusConflict)
+				}
+			}
+
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
 func wsHandlerClosure(rooms map[string]*game.Room, mydb *sql.DB, rng *rand.Rand, qtd int) func(http.ResponseWriter, *http.Request) {
-	return func(res http.ResponseWriter, req *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("Request at /ws")
 
-		err := req.ParseForm()
+		err := r.ParseForm()
 		if err != nil {
-			res.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		roomId := req.Form.Get("roomId")
+		roomId := r.Form.Get("roomId")
 		room, ok := rooms[roomId]
 		if !ok {
-			res.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		conn, err := upgrader.Upgrade(res, req, nil)
-		if err != nil {
-			log.Println("Error upgrading: ", err)
-			return
-		}
-
-		playerId := req.Form.Get("playerId")
-		log.Printf("playerId: %s\n", playerId)
+		playerId := r.Form.Get("playerId")
 
 		var player game.Player
 		if !room.PlayerExists(playerId) {
@@ -173,28 +217,67 @@ func wsHandlerClosure(rooms map[string]*game.Room, mydb *sql.DB, rng *rand.Rand,
 				Mu:    &sync.Mutex{},
 			}
 
-			player.(*game.WSPlayer).Connect(conn)
-
 			playerId = game.GeneratePlayerUUID()
 			ok = room.Add(playerId, player)
 			if !ok {
-				log.Println("The room is full")
-				conn.WriteMessage(websocket.TextMessage, []byte("The room is full, sorry!"))
-				conn.Close()
+				log.Println("Couldn't add the player")
+				return
 			}
 			log.Printf("Created player with id %s\n", playerId)
 		} else {
 			log.Printf("Player %s returned to the game\n", playerId)
 			player = room.GetPlayer(playerId)
-
-			wsPlayer, ok := player.(game.Connectable)
-			if ok {
-				log.Println("Player is WsPlayer")
-				wsPlayer.Connect(conn)
-			}
 		}
 
-		go handleConnection(room, playerId, mydb, rng, qtd)
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println("Error upgrading: ", err)
+			return
+		}
+
+		wsPlayer, ok := player.(*game.WSPlayer)
+		if ok {
+			log.Println("Player is WsPlayer")
+			wsPlayer.Connect(conn)
+		}
+
+		go handleConnection(room, playerId, mydb, rng, qtd, func() {
+			if room.Empty() {
+				log.Printf("Killing room %s\n", roomId)
+
+				delete(rooms, roomId)
+			}
+		})
+	}
+}
+
+func handleListRoomsClosure(rooms map[string]*game.Room) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			responses := make([]RoomResponseDTO, 0)
+			for id := range rooms {
+				responses = append(responses, RoomResponseDTO{
+					Id: id,
+				})
+			}
+
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "application/json")
+
+			body := ListRoomsResponseDTO{
+				Rooms: responses,
+			}
+
+			err := json.NewEncoder(w).Encode(&body)
+			if err != nil {
+				log.Println("Error at list rooms")
+				return
+			}
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
@@ -243,13 +326,17 @@ func startServerCallback() func() error {
 
 		log.Println("Server start")
 
-		http.HandleFunc("/create", handleRoomCreateClosure(rooms, config, mydb, rng, 5))
+		http.HandleFunc("/list", handleListRoomsClosure(rooms))
+		http.HandleFunc("/create", handleCreateRoomClosure(rooms, config, mydb, rng, 5))
 		http.HandleFunc("/ws", wsHandlerClosure(rooms, mydb, rng, 5))
+		http.HandleFunc("/validate", handleCheckCanConnectClosure(rooms))
 
 		fmt.Println("Server listening at port 8080")
 		fmt.Println("Routes")
+		fmt.Println("/list")
 		fmt.Println("/create")
 		fmt.Println("/ws")
+		fmt.Println("/validate")
 		return http.ListenAndServe(":8080", nil)
 	}
 }
@@ -360,19 +447,19 @@ func startHostCallback() func() error {
 	}
 }
 
-func handleRoomCreateClosure(
+func handleCreateRoomClosure(
 	rooms map[string]*game.Room,
 	config *game.RoomConfig,
 	mydb *sql.DB,
 	rng *rand.Rand,
 	qtd int,
 ) func(http.ResponseWriter, *http.Request) {
-	return func(res http.ResponseWriter, req *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("Request at /create")
-		if req.Method == http.MethodPost {
+		if r.Method == http.MethodPost {
 			// maximo de rooms de uma vez
-			if len(rooms) > 5 {
-				res.WriteHeader(http.StatusBadRequest)
+			if len(rooms) >= 5 {
+				http.Error(w, "Maximum number of rooms reached", http.StatusConflict)
 				return
 			}
 
@@ -383,14 +470,14 @@ func handleRoomCreateClosure(
 
 			rooms[id] = room
 
-			res.Header().Set("Access-Control-Allow-Origin", "*")
-			res.WriteHeader(http.StatusOK)
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "application/json")
 
 			response := CreateRoomResponseDTO{
 				Id: id,
 			}
 
-			err := json.NewEncoder(res).Encode(&response)
+			err := json.NewEncoder(w).Encode(&response)
 			if err != nil {
 				log.Println("Failed to encode create room response")
 			}
@@ -400,7 +487,7 @@ func handleRoomCreateClosure(
 			return
 		}
 
-		res.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 

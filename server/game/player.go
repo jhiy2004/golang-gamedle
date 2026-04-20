@@ -76,6 +76,8 @@ func (p *WSPlayer) Connect(conn *websocket.Conn) {
 	p.Conn = conn
 	p.Connected = true
 	p.SendCh = make(chan []byte, 16)
+
+	p.StartWriter()
 }
 
 func (p *WSPlayer) Disconnect() {

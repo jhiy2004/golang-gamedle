@@ -35,11 +35,20 @@ function CreateRoomPage() {
 
   return (
     <MainCard>
-      <Button
-        value="Create Room"
-        type="ready"
-        handleOnClick={handleCreateRoom}
-      />
+      <section
+        style={{
+          padding: "1rem",
+        }}>
+
+        <h1 style={{ marginBottom: "1rem" }}>Rooms</h1>
+        <div style={{display: "flex", justifyContent: "end"}}>
+          <Button
+            value="Create Room"
+            type="ready"
+            handleOnClick={handleCreateRoom}
+          />
+        </div>
+      </section>
     </MainCard>
   )
 }

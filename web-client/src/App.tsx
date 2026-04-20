@@ -130,35 +130,59 @@ function App() {
   }, [playersStatus])
 
   useEffect(() => {
-    if (wsRef.current) return;
+    function websocketConnect() {
+      if (wsRef.current) return;
 
-    const playerId = searchParams.get("playerId")
-    console.log("Received query param: " + playerId)
+      const playerId = searchParams.get("playerId")
 
-    const wsUri = `ws://${import.meta.env.VITE_APP_URL}/ws?roomId=${id}` + (playerId === null ? "" : `&playerId=${playerId}`);
-    const websocket = new WebSocket(wsUri);
+      const wsUri = `ws://${import.meta.env.VITE_APP_URL}/ws?roomId=${id}` + (playerId === null ? "" : `&playerId=${playerId}`);
+      const websocket = new WebSocket(wsUri);
 
-    wsRef.current = websocket;
+      wsRef.current = websocket;
 
-    websocket.addEventListener("error", (event) => {
-      console.log("WebSocket error: ", event);
-    });
+      websocket.addEventListener("error", (event) => {
+        console.log("WebSocket error: ", event);
+      });
 
-    websocket.onopen = () => {
-      console.log("Connected");
-    };
+      websocket.onopen = () => {
+        console.log("Connected");
+      };
 
-    websocket.onmessage = (e) => {
-      console.log("Received:", e.data);
-      const message: Message = JSON.parse(e.data)
-      handleServerResponse(message)
-    };
+      websocket.onmessage = (e) => {
+        console.log("Received:", e.data);
+        const message: Message = JSON.parse(e.data)
+        handleServerResponse(message)
+      };
 
-    return () => {
-      websocket.close();
-      wsRef.current = null;
-    };
-  }, [searchParams, id]);
+      return () => {
+        websocket.close();
+        wsRef.current = null;
+      };
+    }
+
+    async function validateConnection(): Promise<Response> {
+      const baseUrl = import.meta.env.VITE_APP_URL;
+
+      const playerId = searchParams.get("playerId")
+      const url = `http://${baseUrl}/validate?roomId=${id}`+ (playerId === null ? "" : `&playerId=${playerId}`);
+      const response = await fetch(url, {
+        method: 'GET'
+      })
+
+      return response
+    }
+
+    async function connect() {
+      const response = await validateConnection()
+      if (response.ok) {
+        websocketConnect()
+      } else {
+        const message = await response.text()
+        alert(message)
+      }
+    }
+    connect()
+  }, [id, searchParams]);
 
   if (state === 'waiting' || state === '') {
     return <LobbyPage

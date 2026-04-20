@@ -212,7 +212,6 @@ func GameLobby(room *Room, playerId string, msgCh chan *Message) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	err = player.Send(message)
 	if err != nil {
 		log.Println(err)
@@ -221,10 +220,6 @@ func GameLobby(room *Room, playerId string, msgCh chan *Message) error {
 	message, err = NewLobbyMsg(room.CurrPlayers, room.ReadyPlayers)
 	if err != nil {
 		log.Fatal(err)
-	}
-	err = player.Send(message)
-	if err != nil {
-		log.Println(err)
 	}
 	room.Broadcast(nil, message)
 
