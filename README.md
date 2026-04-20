@@ -44,8 +44,8 @@ a valid `playerId` is provided and they are currently disconnected.
 Returns a `200 OK` status if successful, or a non-200 status code along with an error message if the request is denied.
 
 ## Screenshots
-![Tela de Rooms](./images/list_rooms.png)
-![Tela Gameplay](./images/gameplay.png)
-![Tela de Lobby](./images/lobby.png)
 ![Tela entrar em Room](./images/enter_room.png)
+![Tela de Rooms](./images/list_rooms.png)
+![Tela de Lobby](./images/lobby.png)
+![Tela Gameplay](./images/gameplay.png)
 ![Tela de fim de jogo](./images/endgame.png)
